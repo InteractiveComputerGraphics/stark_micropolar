@@ -47,6 +47,8 @@ namespace symx
 		Scalar trace() const;
 		Scalar frobenius_norm_sq() const;
 		Vector singular_values_2x2() const;
+        /// Scalar double dot product between two matrices c = a_ij*b_ij
+        Scalar double_dot(const Matrix& other) const;
 		Matrix dot(const Matrix& other) const;
 		Vector dot(const Vector& vec) const;
 

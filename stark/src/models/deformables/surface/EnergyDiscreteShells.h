@@ -5,6 +5,7 @@
 
 namespace stark
 {
+    /// Energy from "Discrete Shells", Eitan Grinspun, Anil N. Hirani, Mathieu Desbrun, Peter Schröder; 2003
 	class EnergyDiscreteShells
 	{
 	public:

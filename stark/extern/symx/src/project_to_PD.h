@@ -37,16 +37,22 @@ namespace symx
 		//}
 		Eigen::DiagonalMatrix<double, Eigen::Dynamic> D(eigensolver.eigenvalues());
 		// Save a little time and only project the negative or zero values
+		bool needs_projection = false;
 		for (int i = 0; i < A.rows(); i++) {
 			if (D.diagonal()[i] < eps) {
 				D.diagonal()[i] = eps;
-			}
-			else {
+				needs_projection = true;
+			} else {
 				break;
 			}
 		}
-		return eigensolver.eigenvectors() * D
-			* eigensolver.eigenvectors().transpose();
+
+		if (needs_projection) {
+			return eigensolver.eigenvectors() * D
+				* eigensolver.eigenvectors().transpose();
+		} else {
+			return A;
+		}
 	}
 
 	inline void project_to_PD_from_pointer(double* symMtr, const int size, const bool debug_print_lowest = false)
@@ -60,14 +66,21 @@ namespace symx
 			}
 		}
 
+		bool neg_before = false;
+		bool neg_after = false;
+
+		//std::vector<double> eig_before;
+		//std::vector<double> eig_after;
+
 		if (debug_print_lowest) {
 			Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>> eigensolver(m);
-			std::vector<double> eig(eigensolver.eigenvalues().data(), eigensolver.eigenvalues().data() + size);
-			if (*std::min_element(eigensolver.eigenvalues().data(), eigensolver.eigenvalues().data() + size) < 0.0) {
-				std::cout << " x";
+			std::vector<double> eig_before = std::vector<double>(eigensolver.eigenvalues().data(), eigensolver.eigenvalues().data() + size);
+			if (*std::min_element(eig_before.begin(), eig_before.end()) < -std::numeric_limits<double>::epsilon()) {
+				neg_before = true;
+				//std::cout << " x";
 			}
 			else {
-				std::cout << " .";
+				//std::cout << " .";
 			}
 		}
 
@@ -75,12 +88,19 @@ namespace symx
 
 		if (debug_print_lowest) {
 			Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>> eigensolver(m1);
-			std::vector<double> eig(eigensolver.eigenvalues().data(), eigensolver.eigenvalues().data() + size);
-			if (*std::min_element(eigensolver.eigenvalues().data(), eigensolver.eigenvalues().data() + size) < 0.0) {
-				std::cout << "x ";
+			std::vector<double> eig_after = std::vector<double>(eigensolver.eigenvalues().data(), eigensolver.eigenvalues().data() + size);
+			if (*std::min_element(eig_after.begin(), eig_after.end()) < -std::numeric_limits<double>::epsilon()) {
+				neg_after = true;
+				//std::cout << "x ";
 			}
 			else {
-				std::cout << ". ";
+				//std::cout << ". ";
+			}
+
+			if (neg_before && neg_after) {
+				std::cout << " xx ";
+			} else if (!neg_before && neg_after) {
+				std::cout << " .x ";
 			}
 		}
 

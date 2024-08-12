@@ -22,6 +22,8 @@ stark::EnergyDiscreteShells::EnergyDiscreteShells(stark::core::Stark& stark, spP
 		};
 
 
+    // Energy from "Discrete Shells", Eitan Grinspun, Anil N. Hirani, Mathieu Desbrun, Peter Schröder; 2003
+    // with additional bending velocity damping
 	stark.global_energy.add_energy("EnergyDiscreteShells", this->conn_complete,
 		[&](symx::Energy& energy, symx::Element& conn)
 		{
@@ -62,6 +64,7 @@ stark::EnergyDiscreteShells::EnergyDiscreteShells(stark::core::Stark& stark, spP
 		}
 	);
 
+    // Energy from "Discrete Shells", Eitan Grinspun, Anil N. Hirani, Mathieu Desbrun, Peter Schröder; 2003
 	stark.global_energy.add_energy("EnergyDiscreteShells_Elasticity_Only", this->conn_elasticity_only,
 		[&](symx::Energy& energy, symx::Element& conn)
 		{

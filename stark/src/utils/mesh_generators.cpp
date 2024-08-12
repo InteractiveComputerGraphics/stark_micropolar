@@ -150,6 +150,56 @@ stark::Mesh<3> stark::generate_triangle_grid(const Eigen::Vector2d& center, cons
 	generate_triangle_grid(mesh.vertices, mesh.conn, center, dimensions, n_quads_per_dim, z);
 	return mesh;
 }
+void stark::generate_quad_grid(std::vector<Eigen::Vector3d>& out_vertices, std::vector<std::array<int, 4>>& out_connectivity, const Eigen::Vector2d& center, const Eigen::Vector2d& dimensions, const std::array<int, 2>& n_quads_per_dim, const double z)
+{
+    const Eigen::Vector2d bottom = center - 0.5 * dimensions;
+    const Eigen::Vector2d top = center + 0.5 * dimensions;
+    assert(bottom[0] <= top[0] && bottom[1] <= top[1]);
+
+    // Precomputation
+    const int nx = n_quads_per_dim[0] + 1;
+    const int ny = n_quads_per_dim[1] + 1;
+    const int n_points = nx * ny;
+    const int n_quadrilaterals = n_quads_per_dim[0] * n_quads_per_dim[1];
+    const double dx = (top[0] - bottom[0]) / (double)n_quads_per_dim[0];
+    const double dy = (top[1] - bottom[1]) / (double)n_quads_per_dim[1];
+
+    // Points
+    /* Correspond to a quadrilateral following the pattern:
+            [[0, 0],
+             [0, 1],
+             [1, 0],
+             [1, 1]]
+
+        move y -> move x
+    */
+    out_vertices.resize(n_points);
+    for (int i = 0; i < nx; i++) {
+        for (int j = 0; j < ny; j++) {
+            const int idx = ny * i + j;
+            out_vertices[idx] = { bottom[0] + i * dx, bottom[1] + j * dy, z };
+        }
+    }
+
+    out_connectivity.clear();
+    out_connectivity.reserve(n_quadrilaterals);
+    for (int ei = 0; ei < n_quads_per_dim[0]; ei++) {
+        for (int ej = 0; ej < n_quads_per_dim[1]; ej++) {
+            int nodes_idx[] = { ny * (ei + 0) + (ej + 0),
+                                ny * (ei + 0) + (ej + 1),
+                                ny * (ei + 1) + (ej + 0),
+                                ny * (ei + 1) + (ej + 1) };
+
+            out_connectivity.push_back({ nodes_idx[0], nodes_idx[1], nodes_idx[3], nodes_idx[2] });
+        }
+    }
+}
+stark::Mesh<4> stark::generate_quad_grid(const Eigen::Vector2d& center, const Eigen::Vector2d& dimensions, const std::array<int, 2>& n_quads_per_dim, const double z)
+{
+    Mesh<4> mesh;
+    generate_quad_grid(mesh.vertices, mesh.conn, center, dimensions, n_quads_per_dim, z);
+    return mesh;
+}
 void stark::generate_tet_grid(std::vector<Eigen::Vector3d>& out_vertices, std::vector<std::array<int, 4>>& out_tets, const Eigen::Vector3d& center, const Eigen::Vector3d& dimensions, const std::array<int, 3>& n_quads_per_dim)
 {
 	const Eigen::Vector3d bottom = center - 0.5 * dimensions;

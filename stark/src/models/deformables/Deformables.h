@@ -21,5 +21,9 @@ namespace stark
 		std::shared_ptr<EnergyTriangleStrain> triangle_strain;
 		std::shared_ptr<EnergyDiscreteShells> discrete_shells;
 		std::shared_ptr<EnergyTetStrain> tet_strain;
+
+        std::shared_ptr<EnergyTriangleStrainKim20> strain_kim_20;
+        std::shared_ptr<EnergyTriangleStrainWen23> strain_wen_23;
+        std::shared_ptr<EnergyMicropolarShells> strain_micropolar_shells;
 	};
 }

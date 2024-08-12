@@ -4,6 +4,10 @@
 #include <fmt/format.h>
 #include <BlockedSparseMatrix/ConjugateGradientMethod.h>
 
+#ifdef EIGEN_USE_MKL_ALL
+#include <Eigen/PardisoSupport>
+#endif
+
 
 stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, symx::GlobalEnergy& global_energy, Callbacks& callbacks, const Settings& settings, Console& console, Logger& logger)
 {
@@ -55,6 +59,7 @@ stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, sym
 
 		// Energy before the step
 		const double E0 = *assembled.E;
+        const Eigen::VectorXd gradE0 = *assembled.grad;
 
 		// Residual before the step
 		this->residual = this->_compute_residual(*assembled.grad, dt);
@@ -83,9 +88,27 @@ stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, sym
 
 		// Sufficient descend
 		const double du_dot_grad = this->du.dot(*assembled.grad);
+        console.print(fmt::format("du_dot_grad = {:.2e} | ", du_dot_grad), ConsoleVerbosity::NewtonIterations);
 		if (du_dot_grad > 0.0) {
-			newton_state = NewtonState::LineSearchDoesntDescend;
-			break;
+            /*
+            if (!this->settings->newton.project_to_PD && !toggled_pd) {
+                this->global_energy->set_project_to_PD(true);
+                toggled_pd = true;
+                console.print(fmt::format("# Continue with projection # | ", du_dot_grad), ConsoleVerbosity::NewtonIterations);
+                continue;
+            } else {
+                newton_state = NewtonState::LineSearchDoesntDescend;
+                break;
+            }
+            */
+
+            if (this->settings->newton.enable_flipping_on_non_descent) {
+                console.print(fmt::format("# Flipping du # | ", du_dot_grad), ConsoleVerbosity::NewtonIterations);
+                this->du *= -1.0;
+            } else {
+                newton_state = NewtonState::LineSearchDoesntDescend;
+                break;
+            }
 		}
 
 		// Max step in the search direction
@@ -99,7 +122,22 @@ stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, sym
 		// Residual after a valid step
 		assembled = this->_evaluate_E_grad();
 		this->residual = this->_compute_residual(*assembled.grad, dt);
-		residual_max = this->residual.maxCoeff();
+        if (false) {
+            // Print residual per set of DOFs
+            std::vector<int> dofs_offsets = this->global_energy->get_dofs_offsets();
+            for (int i = 0; i < dofs_offsets.size() - 1; ++i) {
+                const int begin = dofs_offsets[i];
+                const int end = dofs_offsets[i + 1];
+                const int n = end - begin;
+                if (n == 0) {
+                    continue;
+                }
+
+                const auto& slice = this->residual.segment(begin, n);
+                console.print(fmt::format("dof({}): r1 norm = {:.2e}, max = {:.2e} | ", i, slice.norm(), slice.maxCoeff()), ConsoleVerbosity::NewtonIterations);
+            }
+        }
+        residual_max = this->residual.maxCoeff();
 		console.print(fmt::format("r1 = {:.2e}", residual_max), ConsoleVerbosity::NewtonIterations);
 
 		//// Converged?
@@ -109,7 +147,10 @@ stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, sym
 		}
 
 		// Line search: Backtracking (Nocedal)
-		double step_that_worked = this->_inplace_backtracking_line_search(this->du, E0, *assembled.E, step_valid_configuration, du_dot_grad);
+        console.print(fmt::format(" | delta r1 = {:.2e}", residual_max - this->settings->newton.residual.tolerance), ConsoleVerbosity::NewtonIterations);
+		double step_that_worked = this->settings->newton.enable_noise_resistant_line_search ?
+                this->_inplace_backtracking_line_search_noise_resistant(this->du, gradE0, E0, *assembled.E, step_valid_configuration, du_dot_grad)
+                : this->_inplace_backtracking_line_search(this->du, E0, *assembled.E, step_valid_configuration, du_dot_grad);
 		if (step_that_worked == 0.0) {
 			newton_state = NewtonState::TooManyLineSearchIterations;
 			break;
@@ -121,9 +162,22 @@ stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, sym
 		newton_state = NewtonState::InvalidConvergedState;
 	}
 
+    {
+        std::vector<int> dofs_offsets = this->global_energy->get_dofs_offsets();
+        for (auto& pair: this->callbacks->get_residual_after_convergence()) {
+            const int dof = pair.first;
+            auto& residual_fn = pair.second;
+
+            const int begin = dofs_offsets[dof];
+            const int end = dofs_offsets[dof + 1];
+
+            residual_fn(this->residual.data() + begin, this->residual.data() + end);
+        }
+    }
+
 	// Print
 	console.print("\n\t\t", ConsoleVerbosity::NewtonIterations);
-	console.print(fmt::format("#newton: {:d} ", this->step_newton_it), ConsoleVerbosity::TimeSteps);
+	console.print(fmt::format("#newton: {:>2d}", this->step_newton_it), ConsoleVerbosity::TimeSteps);
 	console.print(" | #CG/newton: " + std::to_string((int)(this->cg_iterations_in_step / this->step_newton_it)), ConsoleVerbosity::TimeSteps);
 	console.print(" | #line_search/newton: " + std::to_string((int)(this->step_line_search_count / this->step_newton_it)), ConsoleVerbosity::TimeSteps);
 	if (newton_state == NewtonState::Successful) {
@@ -286,17 +340,64 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 		s.setFromTriplets(triplets.begin(), triplets.end());
 		s.makeCompressed();
 
+#ifdef EIGEN_USE_MKL_ALL
+		Eigen::PardisoLU<Eigen::SparseMatrix<double>> lu;
+#else
 		Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> lu;
+#endif
 		lu.analyzePattern(s);
 		lu.factorize(s);
+
+        if (lu.info() != Eigen::ComputationInfo::Success) {
+#ifdef EIGEN_USE_MKL_ALL
+            this->console->add_error_msg("PardisoLU failed to factorize the system.");
+#else
+            this->console->add_error_msg(fmt::format("SparseLU failed to factorize the system. Eigen error: {}", lu.lastErrorMessage()));
+#endif
+            return false;
+        }
+
 		du = lu.solve(rhs);
 		this->logger->stop_timing_add("directLU");
 
 		if (lu.info() != Eigen::ComputationInfo::Success) {
-			this->console->add_error_msg("DirectLU couldn't find a solution.");
+#ifdef EIGEN_USE_MKL_ALL
+            this->console->add_error_msg("PardisoLU failed to solve the system.");
+#else
+			this->console->add_error_msg(fmt::format("SparseLU failed to solve the system. Eigen error: {}", lu.lastErrorMessage()));
+#endif
+			return false;
+		}
+
+        return true;
+	}
+	else if (this->settings->newton.linear_system_solver == LinearSystemSolver::EigenCG) {
+		this->logger->start_timing("CG");
+
+		const double cg_tol = this->_forcing_sequence(rhs);
+		const int max_iterations = std::max(1000, (int)(this->settings->newton.cg_max_iterations_multiplier * rhs.size())); // Very small sims will need to exceed ndofs iterations
+
+		std::vector<Eigen::Triplet<double>> triplets;
+		assembled.hess->to_triplets(triplets);
+
+		Eigen::SparseMatrix<double> s;
+		s.resize(rhs.size(), rhs.size());
+		s.setFromTriplets(triplets.begin(), triplets.end());
+		s.makeCompressed();
+
+		Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower|Eigen::Upper, Eigen::IncompleteCholesky<double, Eigen::Lower|Eigen::Upper>> cg;
+		cg.setTolerance(max_iterations);
+		cg.setTolerance(cg_tol);
+		cg.compute(s);
+		du = cg.solve(rhs);
+		this->logger->stop_timing_add("CG");
+
+		if (cg.info() != Eigen::ComputationInfo::Success) {
+			this->console->add_error_msg("CG couldn't find a solution.");
 			return false;
 		}
 		else {
+			this->cg_iterations_in_step += cg.iterations();
 			return true;
 		}
 	}
@@ -420,5 +521,70 @@ double stark::core::NewtonsMethod::_inplace_backtracking_line_search(const Eigen
 	}
 
 	return step;
+}
+double stark::core::NewtonsMethod::_inplace_backtracking_line_search_noise_resistant(const Eigen::VectorXd &du,
+                                                                                     const Eigen::VectorXd &gradE0,
+                                                                                     double E0, double E,
+                                                                                     double step_valid_configuration,
+                                                                                     double du_dot_grad)
+{
+    const double c = 1e-4;
+    double alpha = step_valid_configuration;
+
+    double dE, acceptable_delta;
+
+    this->logger->start_timing("line_search");
+    int line_search_it = 1;
+    while (true) {
+        dE = E - E0;
+        acceptable_delta = c * alpha * du_dot_grad;
+        if (dE <= acceptable_delta) {
+            break;
+        } else if (std::abs(dE) <= 0.1 * std::abs(E0)) {
+            // Noise resistant line search from "Pitfalls of Projection: A study of Newton-type solvers for incremental potentials"
+            this->console->print(fmt::format("\n\t\t\t {:d}. alpha = {:.2e} | dE={:.6e}, E0={:.6e}", line_search_it, alpha, dE, E0), ConsoleVerbosity::NewtonIterations);
+
+            const Eigen::VectorXd du_original = du;
+            this->du = alpha * du;
+            const auto assembled = this->_evaluate_E_grad();
+            this->du = du_original;
+
+            const Eigen::VectorXd& gradE_alpha_du = *assembled.grad;
+
+            const double dE_approx = (alpha / 2.0) * du.dot(gradE_alpha_du + gradE0);
+            const double eps_est = (alpha / 2.0) * std::abs(du.dot(gradE_alpha_du - gradE0));
+            this->console->print(fmt::format("\n\t\t\t {:d}. alpha = {:.2e} | dE_approx={:.6e}, eps_est={:.6e}, sum={:.6e}, dE_target={:.6e}", line_search_it, alpha, dE_approx, eps_est, dE_approx + eps_est, acceptable_delta), ConsoleVerbosity::NewtonIterations);
+
+            if (dE_approx + eps_est <= acceptable_delta) {
+                break;
+            }
+
+        }
+
+        this->step_line_search_count++;
+
+        // Print
+        this->console->print(fmt::format("\n\t\t\t {:d}. alpha = {:.2e} | dE={:.6e}, dE_target={:.6e}", line_search_it, alpha, dE, acceptable_delta), ConsoleVerbosity::NewtonIterations);
+
+        // Exit
+        if (line_search_it == this->settings->newton.max_line_search_iterations) {
+            alpha = 0.0;
+            break;
+        }
+
+        // Reduce step
+        alpha *= this->settings->newton.line_search_multiplier;
+        this->u1 = this->u0 + alpha * this->du;
+        this->global_energy->set_dofs(this->u1.data());
+
+        // Evaluate
+        E = *this->_evaluate_E().E;
+
+        // Counter
+        line_search_it++;
+    }
+    this->logger->stop_timing_add("line_search");
+
+    return alpha;
 }
 

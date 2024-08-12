@@ -23,6 +23,10 @@ void symx::Energy::set_project_to_PD(const bool project_to_PD)
 {
 	this->project_to_PD = project_to_PD;
 }
+void symx::Energy::set_never_project_to_PD(const bool never_project_to_PD)
+{
+	this->never_enable_project_to_PD = never_project_to_PD;
+}
 void symx::Energy::deferred_init(const bool force_compilation, const bool force_load, const bool suppress_compiler_output)
 {
 	// Check that everything is set
@@ -336,7 +340,7 @@ void symx::Energy::evaluate_E_grad_hess(Assembly& assembly)
 			}
 
 			double* hess_loc = grad_loc + this->n_dofs;
-			if (this->project_to_PD) {
+			if (!this->never_enable_project_to_PD && this->project_to_PD) {
 				project_to_PD_from_pointer(hess_loc, this->n_dofs, /*debug_print_lowest = */ false);
 			}
 

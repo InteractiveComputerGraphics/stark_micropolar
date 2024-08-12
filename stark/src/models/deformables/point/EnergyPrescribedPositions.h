@@ -45,6 +45,7 @@ namespace stark
 		symx::LabelledConnectivity<3> conn{ { "idx", "point", "group" }};
 
 		std::vector<Eigen::Vector3d> target_positions; // per point
+		std::vector<Eigen::Vector3d> target_active; // per group
 		std::vector<double> stiffness; // per group
 		std::vector<double> tolerance; // per group
 
@@ -54,9 +55,9 @@ namespace stark
 	public:
 		/* Methods */
 		EnergyPrescribedPositions(core::Stark& stark, spPointDynamics dyn);
-		Handler add(const PointSetHandler& set, const std::vector<int>& points, const Params& params);
-		Handler add_inside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params);
-		Handler add_outside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params);
+		Handler add(const PointSetHandler& set, const std::vector<int>& points, const Params& params, std::array<bool, 3> active = {true, true, true});
+		Handler add_inside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params, std::array<bool, 3> active = {true, true, true});
+		Handler add_outside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params, std::array<bool, 3> active = {true, true, true});
 		Params get_params(const Handler& handler) const;
 		void set_params(const Handler& handler, const Params& params);
 		void set_transformation(const Handler& handler, const Eigen::Vector3d& t, const Eigen::Matrix3d& R);

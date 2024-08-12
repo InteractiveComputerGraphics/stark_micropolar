@@ -164,6 +164,17 @@ symx::Vector symx::Matrix::singular_values_2x2() const
 
 	return Vector({ s0, s1 });
 }
+symx::Scalar symx::Matrix::double_dot(const Matrix& m2) const
+{
+    assert(this->vals.size() == m2.vals.size() && "symx error: arguments of symx::Matrix::double_dot have to be of the same size.");
+    assert(this->vals.size() > 0 && "symx error: arguments of symx::Matrix::double_dot cannot be of zero size.");
+    const Matrix& m1 = (*this);
+    symx::Scalar res = m1.vals.front().get_zero();
+    for (int i = 0; i < m1.vals.size(); ++i) {
+        res += m1.vals[i] * m2.vals[i];
+    }
+    return res;
+}
 symx::Matrix symx::Matrix::dot(const Matrix& other) const
 {
 	return (*this) * other;

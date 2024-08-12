@@ -32,6 +32,7 @@ namespace stark::core
 
 		// Other
 		std::unordered_map<int, std::function<void(double*, double*)>> inv_mass_application;
+		std::unordered_map<int, std::function<void(double*, double*)>> residual_after_convergence;
 
 		/* Methods */
 		void _run(std::vector<std::function<void()>>& fs)
@@ -67,9 +68,11 @@ namespace stark::core
 		void add_is_converged_state_valid(std::function<bool()> f) { this->is_converged_state_valid.push_back(f); };
 
 		void add_inv_mass_application(const symx::DoF& dof, std::function<void(double*, double*)> f) { this->inv_mass_application[dof.idx] = f; };
+		void add_residual_after_convergence(const symx::DoF& dof, std::function<void(double*, double*)> f) { this->residual_after_convergence[dof.idx] = f; };
 
 		// Get
 		auto& get_inv_mass_application() { return this->inv_mass_application; };
+		auto& get_residual_after_convergence() { return this->residual_after_convergence; };
 
 
 		// Run

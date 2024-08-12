@@ -968,7 +968,10 @@ namespace vtkio
 
 		if (n == 0) { std::cout << "vtkio error: Data input is empty." << std::endl; exit(-1); }
 		if ((dim == 0) || (dim > max_dim)) { std::cout << "vtkio error: " << "Data attribute (" + std::to_string(static_cast<int>(attr_type)) + " dimension must be <= " + std::to_string(max_dim) << std::endl; exit(-1); }
-		if (n_entities * dim != n) { std::cout << "vtkio error: Data length and dimensions mismatch with the number of points or cells." << std::endl; exit(-1); }
+		if (n_entities * dim != n) {
+			std::cout << "vtkio error: Data length and dimensions mismatch with the number of points or cells. (label: "<< label << ", n_entities=" << n_entities << " dim=" << dim << " n=" << n << ")" << std::endl;
+			exit(-1);
+		}
 
 		auto& vtk_data = (point_data) ? this->point_data[label] : this->cell_data[label];
 		vtk_data.attr_type = attr_type;

@@ -1,6 +1,7 @@
 #include "Compilation.h"
 
 #include "omp.h"
+#include <mutex>
 
 #ifdef _MSC_VER
 #define NOMINMAX
@@ -11,7 +12,7 @@ std::string symx::compiler_command = "\"C:\\Program Files\\Microsoft Visual Stud
 std::string symx::compiler_command = "g++";
 #endif
 
-
+std::mutex dl_mutex;
 
 // https://thispointer.com/find-and-replace-all-occurrences-of-a-sub-string-in-c/
 void replace_all(std::string& data, std::string toSearch, std::string replaceStr)
@@ -40,6 +41,7 @@ std::string to_string_with_precision(const double a_value, const int n = 6)
 symx::Compilation::~Compilation()
 {
 	if (this->lib != nullptr) {
+		std::scoped_lock lock(dl_mutex);
 #ifdef _MSC_VER
 		FreeLibrary(this->lib);
 #else
@@ -68,7 +70,7 @@ void symx::Compilation::compile(const std::vector<Scalar>& expr, std::string nam
 #else
 	const std::string enable_output = (suppress_compiler_output) ? " > /dev/null " : "";
 	command += "cd " + folder;
-	command += " ; g++ " + name + ".cpp -shared -O3 -march=native -o " + name + ".so" + enable_output;  // Note: fast-math is not used because it can change the expected results (e.g. sqrt(pow(x, 2)) < 0)
+	command += " ; clang " + name + ".cpp -shared -fPIC -O3 -march=native -o " + name + ".so" + enable_output;  // Note: fast-math is not used because it can change the expected results (e.g. sqrt(pow(x, 2)) < 0)
 #endif
 	t0 = omp_get_wtime();
 	err = system(command.c_str());
@@ -112,19 +114,24 @@ bool symx::Compilation::load_if_cached(std::string name, std::string folder, std
 
 
 	// Load DLL
+	{
+		std::lock_guard lock(dl_mutex);
 #ifdef _MSC_VER
-	if (this->lib != nullptr) {
-		FreeLibrary(this->lib);
-		this->compiled_f = nullptr;
-	}
-	this->lib = LoadLibrary(TEXT(path.c_str()));
+		if (this->lib != nullptr) {
+			FreeLibrary(this->lib);
+			this->compiled_f = nullptr;
+		}
+		this->lib = LoadLibrary(TEXT(path.c_str()));
 #else
-	if (this->lib != nullptr) {
-		dlclose(this->lib);
-		this->compiled_f = nullptr;
-	}
-	this->lib = dlopen(path.c_str(), RTLD_LAZY);
+		{
+			if (this->lib != nullptr) {
+				dlclose(this->lib);
+				this->compiled_f = nullptr;
+			}
+			this->lib = dlopen(path.c_str(), RTLD_LAZY);
+		}
 #endif
+	}
 
 	if (this->lib == NULL) {
 		std::cout << "symx error: invalid shared object loaded for input (" << name << ", " << folder << ")." << std::endl;
@@ -144,11 +151,15 @@ bool symx::Compilation::load_if_cached(std::string name, std::string folder, std
 		// Load the SHA256 in the DLL
 		std::string dll_sha256_checksum;
 		dll_sha256_checksum.resize(64);
+		void (*get_sha256)(char*);
+		{
+			std::scoped_lock lock(dl_mutex);
 #ifdef _MSC_VER
-		void (*get_sha256)(char*) = reinterpret_cast<void(*)(char*)>(GetProcAddress(this->lib, "get_sha256"));
+			get_sha256 = reinterpret_cast<void(*)(char*)>(GetProcAddress(this->lib, "get_sha256"));
 #else
-		void (*get_sha256)(char*) = reinterpret_cast<void(*)(char*)>(dlsym(this->lib, "get_sha256"));
+			get_sha256 = reinterpret_cast<void(*)(char*)>(dlsym(this->lib, "get_sha256"));
 #endif
+		}
 		get_sha256(dll_sha256_checksum.data());
 
 		// Reconstruct SHA256
@@ -161,6 +172,7 @@ bool symx::Compilation::load_if_cached(std::string name, std::string folder, std
 
 	// checksums match?
 	if (load) {
+		std::scoped_lock lock(dl_mutex);
 #ifdef _MSC_VER
 		this->compiled_f = GetProcAddress(this->lib, name.c_str());
 		this->n_inputs = reinterpret_cast<int(*)()>(GetProcAddress(this->lib, "get_n_inputs"))();
@@ -178,6 +190,7 @@ bool symx::Compilation::load_if_cached(std::string name, std::string folder, std
 	}
 	else {
 		if (this->lib != nullptr) {
+			std::scoped_lock lock(dl_mutex);
 #ifdef _MSC_VER
 			FreeLibrary(this->lib);
 #else

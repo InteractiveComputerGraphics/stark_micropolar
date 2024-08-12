@@ -1,17 +1,20 @@
 #include "blends.h"
 
 #include <cmath>
+#include <algorithm>
 
 double stark::blend(double min, double max, double begin_time, double end_time, double current_time, BlendType blendType)
 {
     const double duration = end_time - begin_time;
-    const double dt = current_time - begin_time;
+    const double dt = std::clamp(current_time - begin_time, 0.0, duration);
 
     // Error exit if time is out of range
+    /*
     if (dt < 0.0 || dt > duration) {
         std::cout << "stark error: blend() got time out of range: " << current_time << std::endl;
         exit(-1);
     }
+    */
 
     const double t = dt / duration;
     double result = min;

@@ -1,5 +1,29 @@
 cmake_minimum_required(VERSION 3.9)
 
+# Set the following variable to ON to use MKL in Eigen. In particular, this will enable MKL for the direct linear solver.
+#
+# On Windows it might be required to compile from an "Intel oneAPI command prompt for Intel 64 for Visual Studio 2022"
+# that can be found in the start menu to get the right environment variables.
+# Additionally, if multiple versions of MKL are installed, it might be required to use the CMake
+# option `-DMKL_DIR="..."` pointing to the directory containing the correct CMake config file for MKL (MKLConfig.cmake),
+# e.g. `-DMKL_DIR="C:\Program Files (x86)\Intel\oneAPI\mkl\2024.0\lib\cmake\mkl"`
+#
+# To use MKL with multiple threads, setting the environment variable `MKL_NUM_THREADS` might be required. Otherwise MKL
+# defaults to using only one thread on some systems.
+#
+set(STARK_ENABLE_MKL OFF CACHE BOOL "Flag to enable MKL for Eigen (including the direct solver) in Stark and its dependencies")
+
+if (${STARK_ENABLE_MKL})
+	add_definitions(-DEIGEN_USE_MKL_ALL)
+
+	set(MKL_INTERFACE lp64)
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		set(MKL_THREADING gnu_thread)
+	endif()
+	find_package(MKL CONFIG REQUIRED)
+	message(STATUS "${MKL_IMPORTED_TARGETS}") #Provides available list of targets based on input
+endif()
+
 # Option to disable AVX for ARM-based devices
 set(STARK_ENABLE_AVX ON CACHE BOOL "Flag to enable AVX for Stark and its dependencies")
 
@@ -67,6 +91,12 @@ set(MODELS_DEFORMABLES_FILES
 	src/models/deformables/surface/EnergyTriangleStrain.h
 	src/models/deformables/surface/EnergyDiscreteShells.cpp
 	src/models/deformables/surface/EnergyDiscreteShells.h
+	src/models/deformables/surface/EnergyTriangleStrainKim20.cpp
+	src/models/deformables/surface/EnergyTriangleStrainKim20.h
+	src/models/deformables/surface/EnergyTriangleStrainWen23.cpp
+	src/models/deformables/surface/EnergyTriangleStrainWen23.h
+	src/models/deformables/surface/EnergyMicropolarShell.cpp
+	src/models/deformables/surface/EnergyMicropolarShell.h
 
 	src/models/deformables/volume/EnergyTetStrain.cpp
 	src/models/deformables/volume/EnergyTetStrain.h
@@ -146,7 +176,15 @@ set(MODELS_FILES
 	src/models/Simulation.h
 	src/models/time_integration.cpp
 	src/models/time_integration.h
-	)
+	src/models/symx_quaternion.cpp
+	src/models/symx_quaternion.h
+	src/models/matrix_wrapper.h
+	src/models/fem_types.h
+	src/models/fem_elements.h
+	src/models/fem_symx_types.h
+	src/models/fem_quadrature.h
+	src/models/fem_quadrature.cpp
+)
 
 set(UTILS_FILES
 	src/utils/Mesh.h
@@ -171,6 +209,16 @@ set(ALL_FILES
 add_library(stark ${ALL_FILES})
 
 # Include/link dependencies
+
+## MKL
+if (${STARK_ENABLE_MKL})
+	target_include_directories(stark PUBLIC ${MKL_INCLUDE})
+	target_include_directories(stark PUBLIC ${MKL_H})
+	target_include_directories(symx PUBLIC ${MKL_INCLUDE})
+	target_include_directories(symx PUBLIC ${MKL_H})
+	target_link_libraries(stark MKL::MKL)
+endif()
+
 ## OpenMP
 find_package(OpenMP REQUIRED)
 target_link_libraries(stark OpenMP::OpenMP_CXX)

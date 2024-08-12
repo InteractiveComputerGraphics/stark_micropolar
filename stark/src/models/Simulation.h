@@ -25,6 +25,7 @@ namespace stark
 		const core::Settings& get_settings() const;
 		EventDrivenScript& get_script();
 
+		void add_singleshot_event(double t0, std::function<void(double)> action);
 		void add_time_event(double t0, double t1, std::function<void(double)> action);
 		void add_time_event(double t0, double t1, std::function<void(double, EventInfo&)> action);
 		void run(std::function<void()> callback = nullptr);

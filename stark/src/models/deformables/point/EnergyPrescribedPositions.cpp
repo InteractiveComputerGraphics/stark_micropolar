@@ -18,6 +18,7 @@ stark::EnergyPrescribedPositions::EnergyPrescribedPositions(core::Stark& stark, 
 			symx::Vector v1 = energy.make_dof_vector(this->dyn->dof, this->dyn->v1.data, node["point"]);
 			symx::Vector x0 = energy.make_vector(this->dyn->x0.data, node["point"]);
 			symx::Vector x1_prescribed = energy.make_vector(this->target_positions, node["idx"]);
+			symx::Vector prescribed_active = energy.make_vector(this->target_active, node["group"]);
 			symx::Scalar k = energy.make_scalar(this->stiffness, node["group"]);
 			symx::Scalar dt = energy.make_scalar(stark.dt);
 
@@ -25,17 +26,23 @@ stark::EnergyPrescribedPositions::EnergyPrescribedPositions(core::Stark& stark, 
 			symx::Vector x1 = time_integration(x0, v1, dt);
 
 			// Energy
-			symx::Scalar E = 0.5 * k * (x1 - x1_prescribed).squared_norm();
-			energy.set(E);
+			//symx::Scalar E = 0.5 * k * (x1 - x1_prescribed).squared_norm();
+			symx::Scalar E = energy.make_zero();
+			E += prescribed_active[0] * (x1[0] - x1_prescribed[0]).powN(2);
+			E += prescribed_active[1] * (x1[1] - x1_prescribed[1]).powN(2);
+			E += prescribed_active[2] * (x1[2] - x1_prescribed[2]).powN(2);
+			//E *= 0.5 * k;
+			energy.set(0.5 * k * E);
 		}
 	);
 }
-stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add(const PointSetHandler& set, const std::vector<int>& points, const Params& params)
+stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add(const PointSetHandler& set, const std::vector<int>& points, const Params& params, std::array<bool, 3> active)
 {
 	set.exit_if_not_valid("EnergyPrescribedPositions::add");
 	const int group = (int)this->stiffness.size();
 	this->stiffness.push_back(params.stiffness);
 	this->tolerance.push_back(params.tolerance);
+	this->target_active.emplace_back(active[0] ? 1.0 : 0.0, active[1] ? 1.0 : 0.0, active[2] ? 1.0 : 0.0);
 
 	const int begin = (int)this->target_positions.size();
 	for (int i = 0; i < (int)points.size(); i++) {
@@ -49,7 +56,7 @@ stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add(
 
 	return Handler(this, group);
 }
-stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add_inside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params)
+stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add_inside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params, std::array<bool, 3> active)
 {
 	set.exit_if_not_valid("EnergyPrescribedPositions::add_inside_aabb");
 	Eigen::AlignedBox3d aabb(aabb_center - 0.5*aabb_dim, aabb_center + 0.5*aabb_dim);
@@ -60,9 +67,9 @@ stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add_
 			points.push_back(i);
 		}
 	}
-	return this->add(set, points, params);
+	return this->add(set, points, params, active);
 }
-stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add_outside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params)
+stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add_outside_aabb(const PointSetHandler& set, const Eigen::Vector3d& aabb_center, const Eigen::Vector3d& aabb_dim, const Params& params, std::array<bool, 3> active)
 {
 	set.exit_if_not_valid("EnergyPrescribedPositions::add_outside_aabb");
 	Eigen::AlignedBox3d aabb(aabb_center - 0.5*aabb_dim, aabb_center + 0.5*aabb_dim);
@@ -73,7 +80,7 @@ stark::EnergyPrescribedPositions::Handler stark::EnergyPrescribedPositions::add_
 			points.push_back(i);
 		}
 	}
-	return this->add(set, points, params);
+	return this->add(set, points, params, active);
 }
 stark::EnergyPrescribedPositions::Params stark::EnergyPrescribedPositions::get_params(const Handler& handler) const
 {

@@ -146,6 +146,13 @@ void symx::GlobalEnergy::compile(std::string working_directory, CompilationOptio
 	}
 	const double t1 = omp_get_wtime();
 
+	// Reset number of threads after compilation
+	if (!options.suppress_compiler_output) {
+		if (this->n_threads == -1) {
+			this->n_threads = omp_get_max_threads();
+		}
+	}
+
 	std::string slow_compile_note;
 	#ifdef _MSC_VER
 	slow_compile_note = "(Note: MSVC takes a lot of time just to load!)";

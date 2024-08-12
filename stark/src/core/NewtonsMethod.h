@@ -66,5 +66,6 @@ namespace stark::core
 		bool _solve_linear_system(Eigen::VectorXd& du, const symx::Assembled& assembled, double dt);
 		double _inplace_max_step_in_search_direction(const Eigen::VectorXd& du);
 		double _inplace_backtracking_line_search(const Eigen::VectorXd& du, double E0, double E, double step_valid_configuration, double du_dot_grad);
+        double _inplace_backtracking_line_search_noise_resistant(const Eigen::VectorXd& du, const Eigen::VectorXd& gradE0, double E0, double E, double step_valid_configuration, double du_dot_grad);
 	};
 }

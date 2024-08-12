@@ -64,6 +64,7 @@ std::string to_string(LinearSystemSolver v)
 	switch (v)
 	{
 	case LinearSystemSolver::CG: return "CG"; break;
+	case LinearSystemSolver::EigenCG: return "EigenCG"; break;
 	case LinearSystemSolver::DirectLU: return "DirectLU"; break;
 	default: return ""; break;
 	}
@@ -120,6 +121,8 @@ std::string Settings::as_string() const
 	out += "\n         project_to_PD: " + to_string(this->newton.project_to_PD);
 	out += "\n         max_newton_iterations: " + std::to_string(this->newton.max_newton_iterations);
 	out += "\n         max_line_search_iterations: " + std::to_string(this->newton.max_line_search_iterations);
+    out += "\n         enable_noise_resistant_line_search: " + std::to_string(this->newton.enable_noise_resistant_line_search);
+    out += "\n         enable_flipping_on_non_descent: " + std::to_string(this->newton.enable_flipping_on_non_descent);
 	out += "\n         line_search_multiplier: " + fmt::format("{:f}", this->newton.line_search_multiplier);
 	out += "\n         cg_max_iterations_multiplier: " + fmt::format("{:f}", this->newton.cg_max_iterations_multiplier);
 	out += "\n         epsilon_residual: " + fmt::format("{:.1e}", this->newton.epsilon_residual);
@@ -136,6 +139,20 @@ std::string Settings::as_string() const
 	out += "\n         symx_force_compilation: " + to_string(this->debug.symx_force_compilation);
 	out += "\n         symx_force_load: " + to_string(this->debug.symx_force_load);
 	out += "\n         debug_line_search_output: " + to_string(this->debug.line_search_output);
+
+	out += "\n     Models";
+	out += "\n         enable_default_tri_strain: " + to_string(this->models.enable_default_tri_strain);
+	out += "\n         enable_default_tet_strain: " + to_string(this->models.enable_default_tet_strain);
+	out += "\n         enable_model_wen23: " + to_string(this->models.enable_model_wen23);
+	out += "\n         never_project_tri_wen23: " + to_string(this->models.never_project_tri_wen23);
+    out += "\n         never_project_tri_wen23: " + to_string(this->models.never_project_tri_wen23);
+
+    out += "\n         enable_model_mp_shell: " + to_string(this->models.enable_model_mp_shell);
+    out += "\n         enable_model_mp_shell_use_corot_rotation_interpolation: " + to_string(this->models.enable_model_mp_shell_use_corot_rotation_interpolation);
+    out += "\n         enable_model_mp_shell_use_quaternion_gamma: " + to_string(this->models.enable_model_mp_shell_use_quaternion_gamma);
+    out += "\n         enable_model_mp_shell_full_rest_curvature_terms: " + to_string(this->models.enable_model_mp_shell_full_rest_curvature_terms);
+    out += "\n         enable_model_mp_shell_use_nonlinear_volume_terms: " + to_string(this->models.enable_model_mp_shell_use_nonlinear_volume_terms);
+    out += "\n         never_project_mp_shell: " + to_string(this->models.never_project_mp_shell);
 	out += "\n\n";
 	return out;
 }

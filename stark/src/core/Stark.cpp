@@ -100,6 +100,10 @@ bool Stark::run(double duration, std::function<void()> callback)
 	const double t0 = omp_get_wtime();
 	while (check_simulation_time() && check_duration() && check_frame() && check_execution_time(t0))
 	{
+		// Initialize
+		if (!this->is_init) {
+			this->_initialize();
+		}
 		if (callback != nullptr) { callback(); }
 		success = this->run_one_step();
 		if (!success) {
@@ -121,7 +125,7 @@ bool Stark::run_one_step()
 	this->logger.start_timing("total");
 
 	// Time step begin
-	this->console.print(fmt::format("\t dt: {:.6f} ms | ", 1000.0 * this->dt), ConsoleVerbosity::TimeSteps);
+	this->console.print(fmt::format("\t t: {:.6f} s | dt: {:.6f} ms | ", this->current_time, 1000.0 * this->dt), ConsoleVerbosity::TimeSteps);
 	this->callbacks.run_before_time_step();
 
 	// Use Newton's Method to solve the time step update
@@ -199,6 +203,7 @@ void stark::core::Stark::print()
 	// Info
 	this->console.print("\nInfo\n", ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t # time_steps: {:d}\n", this->logger.get_int("time_steps")), ConsoleVerbosity::Frames);
+	this->console.print(fmt::format("\t # newton_iterations: {:d}\n", this->logger.get_int("newton_iterations")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t # newton/time_steps: {:.1f}\n", (double)this->logger.get_int("newton_iterations") / (double)this->logger.get_int("time_steps")), ConsoleVerbosity::Frames);
 	if (this->settings.newton.linear_system_solver == LinearSystemSolver::CG) {
 		this->console.print(fmt::format("\t # CG_iterations/newton: {:.1f}\n", (double)this->logger.get_int("CG_iterations") / (double)this->logger.get_int("newton_iterations")), ConsoleVerbosity::Frames);
@@ -261,11 +266,11 @@ void Stark::_initialize()
 	}
 	this->console.print("\n\n", ConsoleVerbosity::Frames);
 
+    // Callbacks
+    this->callbacks.run_before_simulation();
+
 	// Write frame zero
 	this->_write_frame();
-
-	// Callbacks
-	this->callbacks.run_before_simulation();
 
 	// Check that the initial state is valid
 	if (!this->callbacks.run_is_initial_state_valid()) {
@@ -290,9 +295,13 @@ void Stark::_write_frame()
 		write_frame_impl();
 	}
 	else {
-		while (this->current_time > this->next_frame_time - std::numeric_limits<double>::epsilon()) {
+		if (this->current_time > this->settings.execution.end_simulation_time && this->next_frame_time > this->settings.execution.end_simulation_time) {
 			write_frame_impl();
-			this->next_frame_time += 1.0 / (double)this->settings.output.fps;
+		} else {
+			while (this->current_time > this->next_frame_time - 1e-14) {
+				write_frame_impl();
+				this->next_frame_time += 1.0 / (double)this->settings.output.fps;
+			}
 		}
 	}
 	this->logger.stop_timing_add("write_frame");

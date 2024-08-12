@@ -9,6 +9,8 @@
 #include "tinyobjloader.h"
 
 #include "unordered_array_set_and_map.h"
+#include "mesh_utils.h"
+
 
 // Tools
 void push_back_if_not_present(std::vector<int>& v, const int value)
@@ -86,7 +88,7 @@ std::vector<stark::Mesh<3>> stark::load_obj(const std::string& path)
                 triangle_global_indices[vertex_i] = global_vertex_index;
                 global_nodes_present[global_vertex_index] = true;
             }
-            tri_mesh.conn.push_back(triangle_global_indices);
+            tri_mesh.conn[tri_i] = triangle_global_indices;
         }
 
         // Reduce global indexes to local indexes
@@ -224,23 +226,49 @@ void stark::find_internal_angles(std::vector<std::array<int, 4>>& internal_angle
 		std::sort(nodes.begin(), nodes.end());  // std::set_intersection assumes sorted
 	}
 
+	std::vector<std::vector<int>> node_face_map;
+	node_face_map.resize(n_nodes);
+	for (int face_i = 0; face_i < (int)triangles.size(); face_i++) {
+		const std::array<int, 3>& face = triangles[face_i];
+		for (int node_i : face) {
+			push_back_if_not_present(node_face_map[node_i], face_i);
+		}
+	}
+
 	std::vector<std::array<int, 2>> edges;
 	find_edges_from_simplices(edges, triangles, n_nodes);
 
 	std::vector<int> buffer;
+	std::vector<int> buffer2;
 	internal_angles.reserve(edges.size());
 	for (int edge_i = 0; edge_i < (int)edges.size(); edge_i++) {
 		const std::array<int, 2>& edge = edges[edge_i];
 		const std::vector<int>& neighs_i = node_node_map[edge[0]];
 		const std::vector<int>& neighs_j = node_node_map[edge[1]];
 		buffer.clear();
+		// Check which neighbors are shared by the two nodes
 		std::set_intersection(neighs_i.begin(), neighs_i.end(), neighs_j.begin(), neighs_j.end(), std::back_inserter(buffer));
 		if (buffer.size() == 2) {
+			// If the edge has exactly two shared neighbors, the internal angle is unambiguous...
 			internal_angles.push_back({ edge[0], edge[1], buffer[0], buffer[1] });
-		}
-		else if (buffer.size() > 2) {
-			std::cout << "Stark error: triangle mesh has edges with more than two incident triangles." << std::endl;
-			exit(-1);
+		} else {
+			// ...otherwise, we have to check the face connectivity of the shared neighbors
+			buffer2.clear();
+			// Check which shared neighbors are part of a face that also contains the edge
+			for (const int i : buffer) {
+				for (const int face_i : node_face_map[i]) {
+					const auto& face = triangles[face_i];
+					if (std::find(face.begin(), face.end(), edge[0]) != face.end() && std::find(face.begin(), face.end(), edge[1]) != face.end()) {
+						buffer2.push_back(i);
+					}
+				}
+			}
+			if (buffer2.size() == 2) {
+				internal_angles.push_back({ edge[0], edge[1], buffer2[0], buffer2[1] });
+			} else {
+				std::cout << "Stark error: triangle mesh has edges with more than two incident triangles." << std::endl;
+				exit(-1);
+			}
 		}
 	}
 }
@@ -497,4 +525,579 @@ Eigen::Vector3d stark::rotate_deg(const Eigen::Vector3d& point, const Eigen::Mat
 	const Eigen::Vector3d p_shifted_rotated = R*p_shifted;
 	const Eigen::Vector3d p_rotated = p_shifted_rotated + pivot;
 	return p_rotated;
+}
+
+stark::Mesh<6> stark::tri3_to_tri6(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 3>>& triangles)
+{
+    Mesh<6> mesh;
+
+    auto& quadratic_vertices = mesh.vertices;
+    auto& quadratic_triangles = mesh.conn;
+
+    quadratic_vertices.reserve(vertices.size());
+    quadratic_triangles.reserve(triangles.size());
+
+    struct Edge {
+        int32_t idx_a;
+        int32_t idx_b;
+
+        static Edge sorted(int32_t a, int32_t b) { return Edge { std::min(a, b),std::max(a, b) }; }
+    };
+
+    struct HashEdge
+    {
+        std::size_t operator()(const Edge& e) const
+        {
+            static_assert(sizeof(Edge) == sizeof(std::size_t));
+            std::size_t h;
+            std::memcpy(&h, &e, sizeof(std::size_t));
+            return h;
+        }
+    };
+
+    struct EqualEdge
+    {
+        bool operator()(const Edge& lhs, const Edge& rhs) const
+        {
+            return lhs.idx_a == rhs.idx_a && lhs.idx_b == rhs.idx_b;
+        }
+    };
+
+    std::unordered_map<Edge, int, HashEdge, EqualEdge> edge_to_midpoint;
+
+    // Copy all linear vertices into new storage for vertices of quadratic mesh
+    quadratic_vertices.insert(quadratic_vertices.begin(), vertices.begin(), vertices.end());
+
+    const int x = std::numeric_limits<int>::max();
+    for (const auto& tri : triangles) {
+        std::array<int, 6> new_triangle {x,x,x,x,x,x};
+        for (int i = 0; i < 3; ++i) {
+            const int vert_a_idx = tri[i];
+            const int vert_b_idx = tri[(i + 1) % 3];
+            const Edge edge = Edge::sorted(vert_a_idx, vert_b_idx);
+
+            auto it = edge_to_midpoint.find(edge);
+            int midpoint_idx = -1;
+            if (it != edge_to_midpoint.end()) {
+                midpoint_idx = it->second;
+            } else {
+                midpoint_idx = quadratic_vertices.size();
+                edge_to_midpoint[edge] = midpoint_idx;
+
+                const Eigen::Vector3d midpoint = (quadratic_vertices[vert_a_idx] + quadratic_vertices[vert_b_idx]) * 0.5;
+                quadratic_vertices.push_back(midpoint);
+            }
+
+            new_triangle[i*2] = vert_a_idx;
+            new_triangle[i*2 + 1] = midpoint_idx;
+        }
+        quadratic_triangles.push_back(new_triangle);
+    }
+
+    return mesh;
+}
+stark::Mesh<3> stark::tri6_to_tri3_coarsen(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 6>>& triangles)
+{
+    Mesh<3> mesh;
+    mesh.vertices = vertices;
+
+    auto& linear_triangles = mesh.conn;
+
+    for (int tri_i = 0; tri_i < triangles.size(); ++tri_i) {
+        const auto& tri = triangles[tri_i];
+        linear_triangles.push_back({tri[0], tri[2], tri[4]});
+    }
+
+    return mesh;
+}
+stark::Mesh<3> stark::tri6_to_tri3_subdivide(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 6>>& triangles)
+{
+    Mesh<3> mesh;
+    mesh.vertices = vertices;
+
+    auto& linear_triangles = mesh.conn;
+
+    for (int tri_i = 0; tri_i < triangles.size(); ++tri_i) {
+        const auto& tri = triangles[tri_i];
+        linear_triangles.push_back({tri[0], tri[1], tri[5]});
+        linear_triangles.push_back({tri[1], tri[2], tri[3]});
+        linear_triangles.push_back({tri[3], tri[4], tri[5]});
+        linear_triangles.push_back({tri[1], tri[3], tri[5]});
+    }
+
+    return mesh;
+}
+stark::Mesh<3> stark::tri6_to_tri3_subdivide_n(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 6>>& triangles, int subdivision_levels)
+{
+    Mesh<3> mesh_tri3;
+    if (subdivision_levels == 0) {
+        mesh_tri3 = tri6_to_tri3_coarsen(vertices, triangles);
+    } else {
+        mesh_tri3 = tri6_to_tri3_subdivide(vertices, triangles);
+        for (int i = 1; i < subdivision_levels; ++i) {
+            auto mesh_tri6 = tri3_to_tri6(mesh_tri3.vertices, mesh_tri3.conn);
+            mesh_tri3 = tri6_to_tri3_subdivide(mesh_tri6.vertices, mesh_tri6.conn);
+        }
+    }
+    return mesh_tri3;
+}
+
+stark::Mesh<10> stark::tri3_to_tri10(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 3>>& triangles)
+{
+    Mesh<10> mesh;
+
+    auto& cubic_vertices = mesh.vertices;
+    auto& cubic_triangles = mesh.conn;
+
+    cubic_vertices.reserve(vertices.size());
+    cubic_triangles.reserve(triangles.size());
+
+    struct Edge {
+        int32_t idx_a;
+        int32_t idx_b;
+
+        static Edge sorted(int32_t a, int32_t b) { return Edge { std::min(a, b),std::max(a, b) }; }
+    };
+
+    struct HashEdge
+    {
+        std::size_t operator()(const Edge& e) const
+        {
+            static_assert(sizeof(Edge) == sizeof(std::size_t));
+            std::size_t h;
+            std::memcpy(&h, &e, sizeof(std::size_t));
+            return h;
+        }
+    };
+
+    struct EqualEdge
+    {
+        bool operator()(const Edge& lhs, const Edge& rhs) const
+        {
+            return lhs.idx_a == rhs.idx_a && lhs.idx_b == rhs.idx_b;
+        }
+    };
+
+    struct InteriorVertices {
+        int32_t idx_a_mid;  // Vertex closer to vertex a
+        int32_t idx_b_mid;  // Vertex closer to vertex b
+    };
+
+    std::unordered_map<Edge, InteriorVertices, HashEdge, EqualEdge> edge_to_midpoint;
+
+    // Copy all linear vertices into new storage for vertices of quadratic mesh
+    cubic_vertices.insert(cubic_vertices.begin(), vertices.begin(), vertices.end());
+
+    const int x = std::numeric_limits<int>::min();
+    for (const auto& tri : triangles) {
+        std::array<int, 10> new_triangle {x,x,x,x,x,x,x,x,x,x};
+        for (int i = 0; i < 3; ++i) {
+            const int vert_a_idx = tri[i];
+            const int vert_b_idx = tri[(i + 1) % 3];
+            const Edge edge = Edge::sorted(vert_a_idx, vert_b_idx);
+
+            auto it = edge_to_midpoint.find(edge);
+            int midpoint_a_idx = -1;
+            int midpoint_b_idx = -1;
+            if (it != edge_to_midpoint.end()) {
+                const auto& interior = it->second;
+                if (edge.idx_a == vert_a_idx) {
+                    midpoint_a_idx = interior.idx_a_mid;
+                    midpoint_b_idx = interior.idx_b_mid;
+                } else {
+                    midpoint_a_idx = interior.idx_b_mid;
+                    midpoint_b_idx = interior.idx_a_mid;
+                }
+            } else {
+                midpoint_a_idx = cubic_vertices.size();
+                midpoint_b_idx = cubic_vertices.size() + 1;
+
+                InteriorVertices interior;
+                if (edge.idx_a == vert_a_idx) {
+                    interior.idx_a_mid = midpoint_a_idx;
+                    interior.idx_b_mid = midpoint_b_idx;
+                } else {
+                    interior.idx_a_mid = midpoint_b_idx;
+                    interior.idx_b_mid = midpoint_a_idx;
+                }
+                edge_to_midpoint[edge] = interior;
+
+                const Eigen::Vector3d midpoint_a = (2.0/3.0) * cubic_vertices[vert_a_idx] + (1.0/3.0) * cubic_vertices[vert_b_idx];
+                const Eigen::Vector3d midpoint_b = (1.0/3.0) * cubic_vertices[vert_a_idx] + (2.0/3.0) * cubic_vertices[vert_b_idx];
+                cubic_vertices.push_back(midpoint_a);
+                cubic_vertices.push_back(midpoint_b);
+            }
+
+            new_triangle[i*3] = vert_a_idx;
+            new_triangle[i*3 + 1] = midpoint_a_idx;
+            new_triangle[i*3 + 2] = midpoint_b_idx;
+        }
+
+        // Add center vertex of triangle
+        const auto& vert_a = vertices[tri[0]];
+        const auto& vert_b = vertices[tri[1]];
+        const auto& vert_c = vertices[tri[2]];
+        const Eigen::Vector3d center = (1.0/3.0)*vert_a + (1.0/3.0)*vert_b + (1.0/3.0)*vert_c;
+        const int center_idx = cubic_vertices.size();
+        cubic_vertices.push_back(center);
+        new_triangle[9] = center_idx;
+
+        cubic_triangles.push_back(new_triangle);
+    }
+
+    return mesh;
+}
+stark::Mesh<3> stark::tri10_to_tri3_subdivide(const std::vector<Eigen::Vector3d>& vertices,
+                                              const std::vector<std::array<int32_t, 10>>& triangles)
+{
+    Mesh<3> mesh;
+    mesh.vertices = vertices;
+
+    auto& linear_triangles = mesh.conn;
+    linear_triangles.reserve(triangles.size() * 9);
+
+    for (int tri_i = 0; tri_i < triangles.size(); ++tri_i) {
+        const auto& tri = triangles[tri_i];
+        linear_triangles.push_back({tri[0], tri[1], tri[8]});
+        linear_triangles.push_back({tri[1], tri[9], tri[8]});
+        linear_triangles.push_back({tri[1], tri[2], tri[9]});
+        linear_triangles.push_back({tri[2], tri[4], tri[9]});
+        linear_triangles.push_back({tri[2], tri[3], tri[4]});
+        linear_triangles.push_back({tri[8], tri[9], tri[7]});
+        linear_triangles.push_back({tri[9], tri[5], tri[7]});
+        linear_triangles.push_back({tri[9], tri[4], tri[5]});
+        linear_triangles.push_back({tri[7], tri[5], tri[6]});
+    }
+
+    return mesh;
+}
+
+template <std::size_t N_SUBDIV_TRIS, std::size_t N_SUBDIV_VERTS>
+std::pair<std::vector<std::array<int32_t, 3>>, std::vector<stark::VertexLocalCoords>> tri_to_tri3_subdivide_with_local_coords(
+    const int num_triangles,
+    int subdivision_levels,
+    const std::array<std::array<int, 3>, N_SUBDIV_TRIS>& subdiv_tris,
+    const std::array<std::array<double, 3>, N_SUBDIV_VERTS>& subdiv_verts)
+{
+    using namespace stark;
+
+    Mesh<3> mesh_tri3;
+    std::vector<VertexLocalCoords> data;
+
+    // Initialize triangle soup
+    std::vector<std::array<int, 3>> triangle_soup;
+    triangle_soup.reserve(num_triangles);
+
+    std::vector<VertexLocalCoords> vertex_data;
+    vertex_data.reserve(num_triangles * 3);
+
+    const std::array<Eigen::Vector2d, 3> tri3_ref = {{{0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}}};
+
+    for (int tri_i = 0; tri_i < num_triangles; ++tri_i) {
+        const int offset = vertex_data.size();
+
+        triangle_soup.push_back({offset + 0, offset + 1, offset + 2});
+        for (int i = 0; i < 3; ++i) {
+            vertex_data.push_back(VertexLocalCoords{
+                    tri_i,
+                    tri3_ref[i]
+            });
+        }
+    }
+
+    if (subdivision_levels == 0) {
+        return std::make_pair(triangle_soup, vertex_data);
+    } else {
+        const auto subdivide_once = [&subdiv_tris, &subdiv_verts](const std::vector<std::array<int, 3>>& triangle_soup, const std::vector<VertexLocalCoords>& data) {
+            std::vector<std::array<int, 3>> new_triangles;
+            new_triangles.reserve(triangle_soup.size() * N_SUBDIV_TRIS);
+
+            std::vector<VertexLocalCoords> new_data;
+            new_data.reserve(triangle_soup.size() * N_SUBDIV_TRIS * 3);
+
+            for (int tri_i = 0; tri_i < triangle_soup.size(); ++tri_i) {
+                const auto& tri = triangle_soup[tri_i];
+                const auto& some_data = data[tri[0]];
+
+                for (const auto& subdiv_tri : subdiv_tris) {
+                    const int offset = new_data.size();
+                    new_triangles.push_back({offset + 0, offset + 1, offset + 2});
+
+                    for (int i = 0; i < 3; ++i) {
+                        const int subdiv_vert = subdiv_tri[i];
+                        const auto& c = subdiv_verts[subdiv_vert];
+
+                        new_data.push_back(VertexLocalCoords{
+                                some_data.origin_tri,
+                                c[0] * data[tri[0]].local_coords + c[1] * data[tri[1]].local_coords + c[2] * data[tri[2]].local_coords,
+                        });
+                    }
+                }
+            }
+
+            return std::make_pair(new_triangles, new_data);
+        };
+
+        for (int i = 0; i < subdivision_levels; ++i) {
+            auto [new_triangle_soup, new_vertex_data] = subdivide_once(triangle_soup, vertex_data);
+            triangle_soup = new_triangle_soup;
+            vertex_data = new_vertex_data;
+        }
+
+        return std::make_pair(triangle_soup, vertex_data);
+    }
+}
+
+std::pair<std::vector<std::array<int32_t, 3>>, std::vector<stark::VertexLocalCoords>> stark::tri6_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 6>>& triangles, int subdivision_levels)
+{
+    std::array<std::array<int, 3>, 4> subdiv_tris {{
+        {0, 1, 5},
+        {1, 2, 3},
+        {5, 3, 4},
+        {1, 3, 5},
+    }};
+
+    std::array<std::array<double, 3>, 6> linear_combinations {{
+        {1.0, 0.0, 0.0},
+        {0.5, 0.5, 0.0},
+        {0.0, 1.0, 0.0},
+        {0.0, 0.5, 0.5},
+        {0.0, 0.0, 1.0},
+        {0.5, 0.0, 0.5},
+    }};
+
+    return tri_to_tri3_subdivide_with_local_coords(triangles.size(), subdivision_levels, subdiv_tris, linear_combinations);
+}
+std::pair<std::vector<std::array<int32_t, 3>>, std::vector<stark::VertexLocalCoords>> stark::tri10_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 10>>& triangles, int subdivision_levels)
+{
+    std::array<std::array<int, 3>, 9> subdiv_tris {{
+        {0, 1, 8},
+        {1, 9, 8},
+        {1, 2, 9},
+        {2, 4, 9},
+        {2, 3, 4},
+        {8, 9, 7},
+        {9, 5, 7},
+        {9, 4, 5},
+        {7, 5, 6},
+    }};
+
+    const double one_third = 1.0/3.0;
+    const double two_third = 2.0/3.0;
+    std::array<std::array<double, 3>, 10> linear_combinations {{
+        {1.0, 0.0, 0.0},
+        {two_third, one_third, 0.0},
+        {one_third, two_third, 0.0},
+        {0.0, 1.0, 0.0},
+        {0.0, two_third, one_third},
+        {0.0, one_third, two_third},
+        {0.0, 0.0, 1.0},
+        {one_third, 0.0, two_third},
+        {two_third, 0.0, one_third},
+        {one_third, one_third, one_third},
+    }};
+
+    return tri_to_tri3_subdivide_with_local_coords(triangles.size(), subdivision_levels, subdiv_tris, linear_combinations);
+}
+
+stark::Mesh<3> stark::quad4_to_tri3(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 4>>& quads)
+{
+    Mesh<3> mesh;
+    mesh.vertices = vertices;
+
+    auto& linear_triangles = mesh.conn;
+
+    for (int quad_i = 0; quad_i < quads.size(); ++quad_i) {
+        const auto& quad = quads[quad_i];
+        linear_triangles.push_back({quad[0], quad[1], quad[2]});
+        linear_triangles.push_back({quad[0], quad[2], quad[3]});
+    }
+
+    return mesh;
+}
+stark::Mesh<9> stark::quad4_to_quad9(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 4>>& quads)
+{
+    Mesh<9> mesh;
+
+    auto& quadratic_vertices = mesh.vertices;
+    auto& quadratic_quads = mesh.conn;
+
+    quadratic_vertices.reserve(vertices.size());
+    quadratic_quads.reserve(quads.size());
+
+    struct Edge {
+        int32_t idx_a;
+        int32_t idx_b;
+
+        static Edge sorted(int32_t a, int32_t b) { return Edge { std::min(a, b),std::max(a, b) }; }
+    };
+
+    struct HashEdge
+    {
+        std::size_t operator()(const Edge& e) const
+        {
+            static_assert(sizeof(Edge) == sizeof(std::size_t));
+            std::size_t h;
+            std::memcpy(&h, &e, sizeof(std::size_t));
+            return h;
+        }
+    };
+
+    struct EqualEdge
+    {
+        bool operator()(const Edge& lhs, const Edge& rhs) const
+        {
+            return lhs.idx_a == rhs.idx_a && lhs.idx_b == rhs.idx_b;
+        }
+    };
+
+    std::unordered_map<Edge, int, HashEdge, EqualEdge> edge_to_midpoint;
+
+    // Copy all linear vertices into new storage for vertices of quadratic mesh
+    quadratic_vertices.insert(quadratic_vertices.begin(), vertices.begin(), vertices.end());
+
+    const int x = std::numeric_limits<int>::max();
+    for (const auto& quad : quads) {
+        std::array<int, 9> new_quad {x,x,x,x,x,x,x,x,x};
+        for (int i = 0; i < 4; ++i) {
+            const int vert_a_idx = quad[i];
+            const int vert_b_idx = quad[(i + 1) % 4];
+            const Edge edge = Edge::sorted(vert_a_idx, vert_b_idx);
+
+            auto it = edge_to_midpoint.find(edge);
+            int midpoint_idx = -1;
+            if (it != edge_to_midpoint.end()) {
+                midpoint_idx = it->second;
+            } else {
+                midpoint_idx = quadratic_vertices.size();
+                edge_to_midpoint[edge] = midpoint_idx;
+
+                const Eigen::Vector3d midpoint = 0.5 * (quadratic_vertices[vert_a_idx] + quadratic_vertices[vert_b_idx]);
+                quadratic_vertices.push_back(midpoint);
+            }
+
+            new_quad[i*2] = vert_a_idx;
+            new_quad[i*2 + 1] = midpoint_idx;
+        }
+
+        new_quad[8] = quadratic_vertices.size();
+        quadratic_vertices.push_back(0.25 * (quadratic_vertices[quad[0]] + quadratic_vertices[quad[1]] + quadratic_vertices[quad[2]] + quadratic_vertices[quad[3]]));
+
+        quadratic_quads.push_back(new_quad);
+    }
+
+    return mesh;
+}
+stark::Mesh<4> stark::quad9_to_quad4_subdivide(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 9>>& quads)
+{
+    Mesh<4> mesh;
+    mesh.vertices = vertices;
+
+    auto& linear_quads = mesh.conn;
+    linear_quads.reserve(quads.size() * 4);
+
+    for (int quad_i = 0; quad_i < quads.size(); ++quad_i) {
+        const auto& quad = quads[quad_i];
+        linear_quads.push_back({quad[0], quad[1], quad[8], quad[7]});
+        linear_quads.push_back({quad[1], quad[2], quad[3], quad[8]});
+        linear_quads.push_back({quad[8], quad[3], quad[4], quad[5]});
+        linear_quads.push_back({quad[7], quad[8], quad[5], quad[6]});
+    }
+
+    return mesh;
+}
+std::pair<std::vector<std::array<int32_t, 3>>, std::vector<stark::VertexLocalCoords>> quad_to_tri3_subdivide_with_local_coords(const int n_quads, int subdivision_levels)
+{
+    using namespace stark;
+
+    Mesh<3> mesh_tri3;
+    std::vector<VertexLocalCoords> data;
+
+    // Initialize triangle soup
+    std::vector<std::array<int, 3>> triangle_soup;
+    triangle_soup.reserve(n_quads * 2);
+
+    std::vector<VertexLocalCoords> vertex_data;
+    vertex_data.reserve(n_quads * 6);
+
+    const std::array<Eigen::Vector2d, 4> quad4_ref = {{{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}}};
+
+    for (int quad_i = 0; quad_i < n_quads; ++quad_i) {
+        const int offset = vertex_data.size();
+
+        triangle_soup.push_back({offset + 0, offset + 1, offset + 2});
+        triangle_soup.push_back({offset + 3, offset + 4, offset + 5});
+        vertex_data.push_back(VertexLocalCoords{ quad_i, quad4_ref[0] });
+        vertex_data.push_back(VertexLocalCoords{ quad_i, quad4_ref[1] });
+        vertex_data.push_back(VertexLocalCoords{ quad_i, quad4_ref[3] });
+        vertex_data.push_back(VertexLocalCoords{ quad_i, quad4_ref[1] });
+        vertex_data.push_back(VertexLocalCoords{ quad_i, quad4_ref[2] });
+        vertex_data.push_back(VertexLocalCoords{ quad_i, quad4_ref[3] });
+    }
+
+    if (subdivision_levels == 0) {
+        return std::make_pair(triangle_soup, vertex_data);
+    } else {
+        const auto subdivide_once = [](const std::vector<std::array<int, 3>>& triangle_soup, const std::vector<VertexLocalCoords>& data) {
+            std::vector<std::array<int, 3>> new_triangles;
+            new_triangles.reserve(triangle_soup.size() * 4);
+
+            std::vector<VertexLocalCoords> new_data;
+            new_data.reserve(triangle_soup.size() * 4 * 3);
+
+            std::array<std::array<int, 3>, 4> subdiv_tris {{
+                                                                   {0, 1, 5},
+                                                                   {1, 3, 5},
+                                                                   {1, 2, 3},
+                                                                   {5, 3, 4},
+                                                           }};
+
+            std::array<std::array<double, 3>, 6> linear_combinations {{
+                                                                              {1.0, 0.0, 0.0},
+                                                                              {0.5, 0.5, 0.0},
+                                                                              {0.0, 1.0, 0.0},
+                                                                              {0.0, 0.5, 0.5},
+                                                                              {0.0, 0.0, 1.0},
+                                                                              {0.5, 0.0, 0.5},
+                                                                      }};
+
+            for (int tri_i = 0; tri_i < triangle_soup.size(); ++tri_i) {
+                const auto& tri = triangle_soup[tri_i];
+                const auto& some_data = data[tri[0]];
+
+                for (const auto& subdiv_tri : subdiv_tris) {
+                    const int offset = new_data.size();
+                    new_triangles.push_back({offset + 0, offset + 1, offset + 2});
+
+                    for (int i = 0; i < 3; ++i) {
+                        const int subdiv_vert = subdiv_tri[i];
+                        const auto& c = linear_combinations[subdiv_vert];
+
+                        new_data.push_back(VertexLocalCoords{
+                                some_data.origin_tri,
+                                c[0] * data[tri[0]].local_coords + c[1] * data[tri[1]].local_coords + c[2] * data[tri[2]].local_coords,
+                        });
+                    }
+                }
+            }
+
+            return std::make_pair(new_triangles, new_data);
+        };
+
+        for (int i = 0; i < subdivision_levels; ++i) {
+            auto [new_triangle_soup, new_vertex_data] = subdivide_once(triangle_soup, vertex_data);
+            triangle_soup = new_triangle_soup;
+            vertex_data = new_vertex_data;
+        }
+
+        return std::make_pair(triangle_soup, vertex_data);
+    }
+}
+std::pair<std::vector<std::array<int32_t, 3>>, std::vector<stark::VertexLocalCoords>> stark::quad4_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 4>>& quads, int subdivision_levels)
+{
+    return quad_to_tri3_subdivide_with_local_coords(quads.size(), subdivision_levels);
+}
+std::pair<std::vector<std::array<int32_t, 3>>, std::vector<stark::VertexLocalCoords>> stark::quad9_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 9>>& quads, int subdivision_levels)
+{
+    return quad_to_tri3_subdivide_with_local_coords(quads.size(), subdivision_levels);
 }

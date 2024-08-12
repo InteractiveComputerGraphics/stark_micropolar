@@ -75,7 +75,41 @@ namespace stark
 	void mirror(std::vector<Eigen::Vector3d>& points, const int dim, const double pivot = 0.0);
 	Eigen::Vector3d rotate_deg(const Eigen::Vector3d& point, const Eigen::Matrix3d& R, const Eigen::Vector3d& pivot);
 
+    //// Higher-order meshes
 
+    /// Converts a mesh of linear (3 node) triangles to a mesh of quadratic (6 node) triangles by subdividing the edges at the midpoints.
+    ///
+    /// The node ordering per triangle of the quadratic triangles is (1,12,2,23,3,31) where 12, 23, 31 are the new midpoints.
+    /// The vector of vertices first contains all vertices in the same order of the original mesh, followed by the newly created midpoints.
+    Mesh<6> tri3_to_tri6(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 3>>& triangles);
+    /// Converts a mesh of quadratic (6 node) triangles to a mesh of linear (3 node) triangles by discarding the midpoints.
+    Mesh<3> tri6_to_tri3_coarsen(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 6>>& triangles);
+    /// Converts a mesh of quadratic (6 node) triangles to a mesh of linear (3 node) triangles by subdividing the faces into four triangle.
+    Mesh<3> tri6_to_tri3_subdivide(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 6>>& triangles);
+    /// Subdivides a mesh of quadratic (6 node) triangles to a mesh of linear (3 node) the given number of times.
+    Mesh<3> tri6_to_tri3_subdivide_n(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 6>>& triangles, int subdivision_levels);
+
+    Mesh<10> tri3_to_tri10(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 3>>& triangles);
+    Mesh<3> tri10_to_tri3_subdivide(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 10>>& triangles);
+
+    Mesh<3> quad4_to_tri3(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 4>>& quads);
+    Mesh<9> quad4_to_quad9(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 4>>& quads);
+    Mesh<4> quad9_to_quad4_subdivide(const std::vector<Eigen::Vector3d>& vertices, const std::vector<std::array<int32_t, 9>>& quads);
+
+    struct VertexLocalCoords {
+        int origin_tri;
+        Eigen::Vector2d local_coords;
+    };
+
+    using SubdividedMesh = std::pair<std::vector<std::array<int32_t, 3>>, std::vector<VertexLocalCoords>>;
+    /// Generates a Tri3 triangle soup from Tri6 triangles by subdivision with information about local coordinates of the added vertices in the original triangles.
+    SubdividedMesh tri6_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 6>>& triangles, int subdivision_levels);
+    /// Generates a Tri3 triangle soup from Tri10 triangles by subdivision with information about local coordinates of the added vertices in the original triangles.
+    SubdividedMesh tri10_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 10>>& triangles, int subdivision_levels);
+    /// Generates a Tri3 triangle soup from Quad4 quadrilaterals by subdivision with information about local coordinates of the added vertices in the original triangles.
+    SubdividedMesh quad4_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 4>>& quads, int subdivision_levels);
+    /// Generates a Tri3 triangle soup from Quad9 quadrilaterals by subdivision with information about local coordinates of the added vertices in the original triangles.
+    SubdividedMesh quad9_to_tri3_subdivide_with_local_coords(const std::vector<std::array<int32_t, 9>>& quads, int subdivision_levels);
 
 
 	// DEFINITIONS ==========================================================================================

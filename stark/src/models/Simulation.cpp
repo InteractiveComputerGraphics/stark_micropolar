@@ -41,6 +41,15 @@ const stark::core::Settings& stark::Simulation::get_settings() const
 	return this->stark.settings;
 }
 
+void stark::Simulation::add_singleshot_event(double t0, std::function<void(double)> action)
+{
+	this->stark.script.add_event(
+		/* action = */ [action, this](EventInfo& event_info) { action(this->get_time()); },
+		/* run_when = */ [t0, this](EventInfo& event_info) { return this->get_time() >= t0 && event_info.is_first_call(); },
+		/* delete_when = */ [](EventInfo& event_info) { return !event_info.is_first_call(); }
+	);
+}
+
 void stark::Simulation::add_time_event(double t0, double t1, std::function<void(double)> action)
 {
 	this->add_time_event(t0, t1, [action](double t, EventInfo& event_info) { action(t); });
