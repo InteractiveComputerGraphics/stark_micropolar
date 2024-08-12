@@ -2,9 +2,9 @@
 
 This repository contains the source code used to produce the results for our paper:
 
-Löschner, F., Fernández-Fernández, J.A., Jeske, S.R. and Bender, J., 2024. **Curved Three-Director Cosserat Shells with Strong Coupling**. Computer Graphics Forum (CGF), DOI: 10.1111/cgf.15183.
+> Löschner, F., Fernández-Fernández, J.A., Jeske, S.R. and Bender, J., 2024. **Curved Three-Director Cosserat Shells with Strong Coupling**. Computer Graphics Forum (CGF), DOI: 10.1111/cgf.15183.
 
-Please also see the entry on our website for access to the paper, the supplemental document, video and more.
+Please also see the [entry on our website](https://animation.rwth-aachen.de/publication/0589/) for access to the paper, the supplemental document, video and more.
 For newcomers to [**Stark**](https://github.com/InteractiveComputerGraphics/stark), please also check out the [upstream repository](https://github.com/InteractiveComputerGraphics/stark) without the paper specific additions.
 
 <p align=center>
