@@ -33,9 +33,9 @@ The project uses CMake as a build system and should work on Windows, Linux and M
 A few notes:
  - Some scenes use meshes found in the "`models`" folder of the repository. When running these scenes, the application assumes that the current working directory of the process is the root of this repository (i.e. the "`models`" folders is reachable as "`./models`").
  - On Linux and MacOS we use Clang for code generation at runtime (compilation of derivatives) which requires Clang to be installed and its executable to be in `PATH`.
-   On Windows MSVC is used for compilation at runtime which might require changing the path in the file 
- - By setting the CMake variable `STARK_ENABLE_MKL` to `ON` you can enable Intel MKL for the direct solver which was used for the experiments in the paper.
-   By default the project will use the LU decomposition implementation of Eigen instead.
+   On Windows MSVC is used for compilation at runtime which might require adapting the path in the `compiler_command` variable in the file [`Compilation.cpp`](stark/extern/symx/src/Compilation.cpp)
+ - By setting the CMake variable `STARK_ENABLE_MKL` to `ON` you can enable Intel MKL for the direct solver which was also used for the timings and experiments in the paper.
+   By default the project will instead fall back to the LU decomposition implementation of Eigen.
    For the compilation with MKL to succeed, the appropriate environment variables have to be set.
    On Windows this is usually achieved by starting the IDE or compilation from an "Intel oneAPI command prompt" that can be opened from a shortcut in the start menu after installation of MKL.
    On Linux MKL should be detected automatically if it was installed from the official repositories.
