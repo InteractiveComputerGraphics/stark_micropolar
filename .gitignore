@@ -1,3 +1,10 @@
+.DS_Store
+
 *.pyc
 *.pyi
 *.pyd
+
+.idea/
+cmake-build-*/
+
+output/
