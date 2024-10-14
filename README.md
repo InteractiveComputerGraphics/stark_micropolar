@@ -30,6 +30,20 @@ Notable additions on top of the main Stark repository to facilitate the experime
 ## Build instructions
 
 The project uses CMake as a build system and should work on Windows, Linux and macOS.
+In-source builds are supported but we recommend building in a subfolder:
+```bash
+mkdir build
+cd build
+cmake -DCMAKE_BUILD_TYPE=Release ../
+cmake --build . --target examples --parallel 16
+```
+To run the experiments shown in the paper, execute the binary created in the `examples` folder:
+```bash
+cd ../
+./examples/examples
+```
+By default this runs the small metal strip twisting scene. For other scenes, uncomment the respective scene at the bottom of the [`main.cpp`](examples/main.cpp) file.
+
 A few notes:
  - Some scenes use meshes found in the "`models`" folder of the repository. When running these scenes, the application assumes that the current working directory of the process is the root of this repository (i.e. the "`models`" folders is reachable as "`./models`").
  - On Linux and macOS we use Clang for code generation at runtime (compilation of derivatives) which requires Clang to be installed and its executable to be in `PATH`.
