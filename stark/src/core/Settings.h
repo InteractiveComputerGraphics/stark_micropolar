@@ -11,7 +11,7 @@ namespace stark
 {
 	// User facing enums
 	enum class ResidualType { Force, Acceleration };
-	enum class LinearSystemSolver { CG, EigenCG, DirectLU };
+	enum class LinearSystemSolver { CG, EigenCG, DirectLU, DirectLDLT, DirectIndefinite };
 	struct Residual { ResidualType type; double tolerance; };
 
 	// Wrapper to set SymX compiler

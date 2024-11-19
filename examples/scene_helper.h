@@ -460,7 +460,7 @@ struct ShellSceneSettings {
         settings.debug.symx_finite_difference_check = false;
         settings.simulation.init_frictional_contact = false;
         settings.newton.project_to_PD = false;
-        settings.newton.linear_system_solver = stark::LinearSystemSolver::DirectLU;
+        settings.newton.linear_system_solver = stark::LinearSystemSolver::DirectIndefinite;
         settings.newton.residual = { stark::ResidualType::Force, 1e-7 };
         settings.newton.max_line_search_iterations = 20;
         settings.newton.enable_noise_resistant_line_search = true;

@@ -205,9 +205,7 @@ void stark::core::Stark::print()
 	this->console.print(fmt::format("\t # time_steps: {:d}\n", this->logger.get_int("time_steps")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t # newton_iterations: {:d}\n", this->logger.get_int("newton_iterations")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t # newton/time_steps: {:.1f}\n", (double)this->logger.get_int("newton_iterations") / (double)this->logger.get_int("time_steps")), ConsoleVerbosity::Frames);
-	if (this->settings.newton.linear_system_solver == LinearSystemSolver::CG) {
-		this->console.print(fmt::format("\t # CG_iterations/newton: {:.1f}\n", (double)this->logger.get_int("CG_iterations") / (double)this->logger.get_int("newton_iterations")), ConsoleVerbosity::Frames);
-	}
+    this->console.print(fmt::format("\t # CG_iterations/newton: {:.1f}\n", (double)this->logger.get_int("CG_iterations") / (double)this->logger.get_int("newton_iterations")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t # line_search/newton: {:.1f}\n", (double)this->logger.get_int("line_search_iterations") / (double)this->logger.get_int("newton_iterations")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t avg dt: {:.6f} ms\n", 1000.0 * this->logger.get_double("avg dt")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t cr: {:.1f}\n", this->logger.get_double("cr")), ConsoleVerbosity::Frames);
@@ -218,15 +216,12 @@ void stark::core::Stark::print()
 	this->console.print(fmt::format("\t evaluate_E_grad_hess: {:.3f} s\n", this->logger.get_double("evaluate_E_grad_hess")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t evaluate_E_grad: {:.3f} s\n", this->logger.get_double("evaluate_E_grad")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t evaluate_E: {:.3f} s\n", this->logger.get_double("evaluate_E")), ConsoleVerbosity::Frames);
-	if (this->settings.newton.linear_system_solver == LinearSystemSolver::CG) {
-		this->console.print(fmt::format("\t CG: {:.3f} s\n", this->logger.get_double("CG")), ConsoleVerbosity::Frames);
-	}
-	else if (this->settings.newton.linear_system_solver == LinearSystemSolver::DirectLU) {
-		this->console.print(fmt::format("\t directLU: {:.3f} s\n", this->logger.get_double("directLU")), ConsoleVerbosity::Frames);
-	}
+    this->console.print(fmt::format("\t CG: {:.3f} s\n", this->logger.get_double("CG")), ConsoleVerbosity::Frames);
+    this->console.print(fmt::format("\t directLU: {:.3f} s\n", this->logger.get_double("directLU")), ConsoleVerbosity::Frames);
+    this->console.print(fmt::format("\t directLDLT: {:.3f} s\n", this->logger.get_double("directLDLT")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t before_energy_evaluation: {:.3f} s\n", this->logger.get_double("before_energy_evaluation")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t after_energy_evaluation: {:.3f} s\n", this->logger.get_double("after_energy_evaluation")), ConsoleVerbosity::Frames);
-	this->console.print(fmt::format("\t is_intermidiate_state_valid: {:.3f} s\n", this->logger.get_double("is_intermidiate_state_valid")), ConsoleVerbosity::Frames);
+	this->console.print(fmt::format("\t is_intermediate_state_valid: {:.3f} s\n", this->logger.get_double("is_intermidiate_state_valid")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t failed steps: {:.3f} s\n", this->logger.get_double("failed_steps")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t write_frame: {:.3f} s\n", this->logger.get_double("write_frame")), ConsoleVerbosity::Frames);
 }

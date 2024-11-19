@@ -329,8 +329,19 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 	// Right hand side
 	Eigen::VectorXd rhs = -1.0 * (*assembled.grad);
 
+    auto linear_solver = this->settings->newton.linear_system_solver;
+    if (linear_solver == LinearSystemSolver::DirectIndefinite) {
+#ifdef EIGEN_USE_MKL_ALL
+        // With MKL, LDLT is faster for indefinite matrices than LU
+        linear_solver = LinearSystemSolver::DirectLDLT;
+#else
+        // Eigen LDLT does not support indefinite matrices
+        linear_solver = LinearSystemSolver::DirectLU;
+#endif
+    }
+
 	// Solve
-	if (this->settings->newton.linear_system_solver == LinearSystemSolver::DirectLU) {
+	if (linear_solver == LinearSystemSolver::DirectLU) {
 		this->logger->start_timing("directLU");
 		std::vector<Eigen::Triplet<double>> triplets;
 		assembled.hess->to_triplets(triplets);
@@ -371,7 +382,50 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 
         return true;
 	}
-	else if (this->settings->newton.linear_system_solver == LinearSystemSolver::EigenCG) {
+    if (linear_solver == LinearSystemSolver::DirectLDLT) {
+        this->logger->start_timing("directLDLT");
+        std::vector<Eigen::Triplet<double>> triplets;
+        assembled.hess->to_triplets(triplets);
+
+        Eigen::SparseMatrix<double> s;
+        s.resize(rhs.size(), rhs.size());
+        s.setFromTriplets(triplets.begin(), triplets.end());
+        s.makeCompressed();
+
+#ifdef EIGEN_USE_MKL_ALL
+        Eigen::PardisoLDLT<Eigen::SparseMatrix<double>> ldlt;
+        ldlt.pardisoParameterArray()[20] = 1;   // Apply 1x1 and 2x2 Bunch-Kaufman pivoting to support indefinite matrices
+#else
+        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Lower, Eigen::COLAMDOrdering<int>> ldlt;
+        // No indefinite matrix support in Eigen though
+#endif
+        ldlt.analyzePattern(s);
+        ldlt.factorize(s);
+
+        if (ldlt.info() != Eigen::ComputationInfo::Success) {
+#ifdef EIGEN_USE_MKL_ALL
+            this->console->add_error_msg("PardisoLDLT failed to factorize the system.");
+#else
+            this->console->add_error_msg("SimplicialLDLT failed to factorize the system.");
+#endif
+            return false;
+        }
+
+        du = ldlt.solve(rhs);
+        this->logger->stop_timing_add("directLDLT");
+
+        if (ldlt.info() != Eigen::ComputationInfo::Success) {
+#ifdef EIGEN_USE_MKL_ALL
+            this->console->add_error_msg("PardisoLDLT failed to solve the system.");
+#else
+            this->console->add_error_msg("SimplicialLDLT failed to solve the system.");
+#endif
+            return false;
+        }
+
+        return true;
+    }
+	else if (linear_solver == LinearSystemSolver::EigenCG) {
 		this->logger->start_timing("CG");
 
 		const double cg_tol = this->_forcing_sequence(rhs);
@@ -401,7 +455,7 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 			return true;
 		}
 	}
-	else if (this->settings->newton.linear_system_solver == LinearSystemSolver::CG) {
+	else if (linear_solver == LinearSystemSolver::CG) {
 		this->logger->start_timing("CG");
 		const int n_threads = this->settings->execution.n_threads;
 		const double cg_tol = this->_forcing_sequence(rhs);

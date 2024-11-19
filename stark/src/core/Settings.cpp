@@ -66,6 +66,8 @@ std::string to_string(LinearSystemSolver v)
 	case LinearSystemSolver::CG: return "CG"; break;
 	case LinearSystemSolver::EigenCG: return "EigenCG"; break;
 	case LinearSystemSolver::DirectLU: return "DirectLU"; break;
+    case LinearSystemSolver::DirectLDLT: return "DirectLDLT"; break;
+    case LinearSystemSolver::DirectIndefinite: return "DirectIndefinite"; break;
 	default: return ""; break;
 	}
 }
