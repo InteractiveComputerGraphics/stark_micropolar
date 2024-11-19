@@ -7,5 +7,5 @@
 .idea/
 cmake-build-*/
 build/
-
+codegen/
 output/
