@@ -8,6 +8,10 @@
 #include <Eigen/PardisoSupport>
 #endif
 
+#ifdef STARK_ENABLE_ACCELERATE
+#include <Eigen/AccelerateSupport>
+#endif
+
 
 stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, symx::GlobalEnergy& global_energy, Callbacks& callbacks, const Settings& settings, Console& console, Logger& logger)
 {
@@ -334,6 +338,9 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 #ifdef EIGEN_USE_MKL_ALL
         // With MKL, LDLT is faster for indefinite matrices than LU
         linear_solver = LinearSystemSolver::DirectLDLT;
+#elif defined(STARK_ENABLE_ACCELERATE)
+        // Accelerate also provides an indefinite LDLT solver
+    	linear_solver = LinearSystemSolver::DirectLDLT;
 #else
         // Eigen LDLT does not support indefinite matrices
         linear_solver = LinearSystemSolver::DirectLU;
@@ -354,7 +361,7 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 #ifdef EIGEN_USE_MKL_ALL
 		Eigen::PardisoLU<Eigen::SparseMatrix<double>> lu;
 #else
-		Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> lu;
+		Eigen::SparseLU<Eigen::SparseMatrix<double>> lu;
 #endif
 		lu.analyzePattern(s);
 		lu.factorize(s);
@@ -395,8 +402,10 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 #ifdef EIGEN_USE_MKL_ALL
         Eigen::PardisoLDLT<Eigen::SparseMatrix<double>> ldlt;
         ldlt.pardisoParameterArray()[20] = 1;   // Apply 1x1 and 2x2 Bunch-Kaufman pivoting to support indefinite matrices
+#elif defined(STARK_ENABLE_ACCELERATE)
+		Eigen::AccelerateLDLTSBK<Eigen::SparseMatrix<double>> ldlt;
 #else
-        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>, Eigen::Lower, Eigen::COLAMDOrdering<int>> ldlt;
+        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> ldlt;
         // No indefinite matrix support in Eigen though
 #endif
         ldlt.analyzePattern(s);

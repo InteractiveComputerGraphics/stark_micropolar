@@ -30,7 +30,7 @@ Notable additions on top of the main Stark repository to facilitate the experime
 ## Build instructions
 
 The project uses CMake as a build system and should work on Windows, Linux and macOS.
-In-source builds are supported but we recommend building in a subfolder:
+In-source builds are supported, but we recommend building in a subfolder:
 ```bash
 mkdir build
 cd build
@@ -42,18 +42,19 @@ To run the experiments shown in the paper, execute the binary created in the `ex
 cd ../
 ./examples/examples
 ```
-By default this runs the small metal strip twisting scene. For other scenes, uncomment the respective scene at the bottom of the [`main.cpp`](examples/main.cpp) file.
+By default, this runs the small metal strip twisting scene. For other scenes, uncomment the respective scene at the bottom of the [`main.cpp`](examples/main.cpp) file.
 
 A few notes:
  - Some scenes use meshes found in the "`models`" folder of the repository. When running these scenes, the application assumes that the current working directory of the process is the root of this repository (i.e. the "`models`" folders is reachable as "`./models`").
- - On Linux and macOS we use Clang for code generation at runtime (compilation of derivatives) which requires Clang to be installed and its executable to be in `PATH`.
-   On Windows MSVC is used for compilation at runtime which might require adapting the path in the `compiler_command` variable in the file [`Compilation.cpp`](stark/extern/symx/src/Compilation.cpp)
- - By setting the CMake variable `STARK_ENABLE_MKL` to `ON` you can enable Intel MKL for the direct solver which was also used for the timings and experiments in the paper.
-   By default, the project will instead fall back to the LU decomposition implementation of Eigen.
-   For the compilation with MKL to succeed, the appropriate environment variables have to be set.
-   On Windows this is usually achieved by starting the IDE or compilation from an "Intel oneAPI command prompt" that can be opened from a shortcut in the start menu after installation of MKL.
-   On Linux MKL should be detected automatically if it was installed from the official repositories.
- - On Apple Silicon devices it is required to manually set the CMake variable `STARK_ENABLE_AVX` to `OFF`.
+ - On Linux and macOS, we use Clang for code generation at runtime (compilation of derivatives) which requires Clang to be installed and its executable to be in `PATH`.
+   On Windows, MSVC is used for compilation at runtime which might require adapting the path in the `compiler_command` variable in the file [`Compilation.cpp`](stark/extern/symx/src/Compilation.cpp)
+ - By default, this repository uses direct solvers as implemented by Eigen. Through the Eigen support modules it's possible to use external direct solvers for improved performance:
+   - **Intel MKL:** By setting the CMake variable `STARK_ENABLE_MKL` to `ON` you can enable Intel MKL for the direct solvers (LU, LDLT). The MKL LU decomposition was also used for the timings and experiments in the paper.
+     For the compilation with MKL to succeed, the appropriate environment variables have to be set.
+     On Windows, this is usually achieved by starting the IDE or compilation from an "Intel oneAPI command prompt" that can be opened from a shortcut in the start menu after installation of MKL.
+     On Linux, MKL should be detected automatically if it was installed from the official repositories. (Tested with MKL 2025.0.1 and some earlier versions)
+   - **Apple Accelerate:** By setting the CMake variable `STARK_ENABLE_ACCELERATE` to `ON`, it is possible to use direct solvers from the Apple [Accelerate](https://developer.apple.com/documentation/accelerate/sparse_solvers?language=objc) framework on macOS provided through the [AccelerateSupport](https://eigen.tuxfamily.org/dox/group__AccelerateSupport__Module.html) module of Eigen. Currently, this is used only for the indefinite LDLT solver.
+ - On Apple Silicon devices, it is required to manually set the CMake variable `STARK_ENABLE_AVX` to `OFF`.
  - The project uses OpenMP for parallelization. On macOS, you might need to install OpenMP with Homebrew and ensure that it can be found by CMake (e.g. by specifying `CMAKE_PREFIX_PATH=/opt/homebrew/opt/libomp`).
 
 ## References

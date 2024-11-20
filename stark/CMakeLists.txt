@@ -24,6 +24,17 @@ if (${STARK_ENABLE_MKL})
 	message(STATUS "${MKL_IMPORTED_TARGETS}") #Provides available list of targets based on input
 endif()
 
+# Option to enable Accelerate
+set(STARK_ENABLE_ACCELERATE OFF CACHE BOOL "Flag to enable Apple Accelerate for Eigen direct solvers in Stark and its dependencies")
+
+if (${STARK_ENABLE_ACCELERATE})
+	#add_definitions(-DEIGEN_USE_BLAS)
+	add_definitions(-DSTARK_ENABLE_ACCELERATE)
+	find_library(ACCELERATE Accelerate)
+	link_libraries(${ACCELERATE})
+	message(STATUS "Using Accelerate")
+endif()
+
 # Option to disable AVX for ARM-based devices
 set(STARK_ENABLE_AVX ON CACHE BOOL "Flag to enable AVX for Stark and its dependencies")
 
