@@ -251,7 +251,7 @@ void stark::find_internal_angles(std::vector<std::array<int, 4>>& internal_angle
 		if (buffer.size() == 2) {
 			// If the edge has exactly two shared neighbors, the internal angle is unambiguous...
 			internal_angles.push_back({ edge[0], edge[1], buffer[0], buffer[1] });
-		} else {
+		} else if (buffer.size() > 2) {
 			// ...otherwise, we have to check the face connectivity of the shared neighbors
 			buffer2.clear();
 			// Check which shared neighbors are part of a face that also contains the edge
