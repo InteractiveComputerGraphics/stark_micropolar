@@ -2061,7 +2061,7 @@ void plate_angular_inertia_mp() {
         stark::Settings settings = scene_settings.simulator_settings();
 
         settings.models.enable_model_mp_shell = true;
-        settings.execution.end_simulation_time = 8.0;
+        settings.execution.end_simulation_time = 60.0;
 
         //settings.simulation.max_time_step_size = 1.0/60.0;   // 60 Hz
         settings.simulation.max_time_step_size = 0.005;
@@ -2119,9 +2119,10 @@ void plate_angular_inertia_mp() {
         simulation.run([&]() {});
     };
 
-    scene_settings.file_prefix = "ang_inertia_on";
-    scene(scene_settings, false);
+    scene_settings.subfolder_per_simulation = true;
     scene_settings.file_prefix = "ang_inertia_off";
+    scene(scene_settings, false);
+    scene_settings.file_prefix = "ang_inertia_on";
     scene(scene_settings, true);
 }
 
