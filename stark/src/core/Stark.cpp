@@ -211,14 +211,18 @@ void stark::core::Stark::print()
 	this->console.print(fmt::format("\t cr: {:.1f}\n", this->logger.get_double("cr")), ConsoleVerbosity::Frames);
 
 	// Runtime
+	const double assembly = this->logger.get_double("evaluate_E_grad_hess") + this->logger.get_double("evaluate_E_grad") + this->logger.get_double("evaluate_E") + this->logger.get_double("toEigenMatrix");
 	this->console.print("Runtime\n", ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t total: {:.3f} s\n", this->logger.get_double("total")), ConsoleVerbosity::Frames);
+	this->console.print(fmt::format("\t per step: {:.2f} ms\n", (this->logger.get_double("total") / this->logger.get_int("time_steps")) * 1000.0), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t evaluate_E_grad_hess: {:.3f} s\n", this->logger.get_double("evaluate_E_grad_hess")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t evaluate_E_grad: {:.3f} s\n", this->logger.get_double("evaluate_E_grad")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t evaluate_E: {:.3f} s\n", this->logger.get_double("evaluate_E")), ConsoleVerbosity::Frames);
-    this->console.print(fmt::format("\t CG: {:.3f} s\n", this->logger.get_double("CG")), ConsoleVerbosity::Frames);
-    this->console.print(fmt::format("\t directLU: {:.3f} s\n", this->logger.get_double("directLU")), ConsoleVerbosity::Frames);
-    this->console.print(fmt::format("\t directLDLT: {:.3f} s\n", this->logger.get_double("directLDLT")), ConsoleVerbosity::Frames);
+	this->console.print(fmt::format("\t toEigenMatrix: {:.3f} s\n", this->logger.get_double("toEigenMatrix")), ConsoleVerbosity::Frames);
+	this->console.print(fmt::format("\t assembly (hess+grad): {:.3f} s ({:.2f}%)\n", assembly, assembly/this->logger.get_double("total")*100.0), ConsoleVerbosity::Frames);
+    this->console.print(fmt::format("\t CG: {:.3f} s ({:.2f}%)\n", this->logger.get_double("CG"), this->logger.get_double("CG")/this->logger.get_double("total")*100.0), ConsoleVerbosity::Frames);
+    this->console.print(fmt::format("\t directLU: {:.3f} s ({:.2f}%)\n", this->logger.get_double("directLU"), this->logger.get_double("directLU")/this->logger.get_double("total")*100.0), ConsoleVerbosity::Frames);
+    this->console.print(fmt::format("\t directLDLT: {:.3f} s ({:.2f}%)\n", this->logger.get_double("directLDLT"), this->logger.get_double("directLDLT")/this->logger.get_double("total")*100.0), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t before_energy_evaluation: {:.3f} s\n", this->logger.get_double("before_energy_evaluation")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t after_energy_evaluation: {:.3f} s\n", this->logger.get_double("after_energy_evaluation")), ConsoleVerbosity::Frames);
 	this->console.print(fmt::format("\t is_intermediate_state_valid: {:.3f} s\n", this->logger.get_double("is_intermidiate_state_valid")), ConsoleVerbosity::Frames);

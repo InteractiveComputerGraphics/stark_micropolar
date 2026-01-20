@@ -55,15 +55,19 @@ stark::core::NewtonState stark::core::NewtonsMethod::solve(const double& dt, sym
 			this->global_energy->test_derivatives_with_FD(1e-8);
 		}
 
-		// Print line header
-		console.print(fmt::format("\n\t\t {:d}. ", this->step_newton_it), ConsoleVerbosity::NewtonIterations);
-
 		// Assemble linear system
 		symx::Assembled assembled = this->_evaluate_E_grad_hess();
 
 		// Energy before the step
 		const double E0 = *assembled.E;
         const Eigen::VectorXd gradE0 = *assembled.grad;
+
+		if (this->step_newton_it == 1) {
+			console.print(fmt::format("E0 = {:.6e} | ", E0), ConsoleVerbosity::TimeSteps);
+		}
+
+		// Print line header
+		console.print(fmt::format("\n\t\t {:d}. ", this->step_newton_it), ConsoleVerbosity::NewtonIterations);
 
 		// Residual before the step
 		this->residual = this->_compute_residual(*assembled.grad, dt);
@@ -349,7 +353,7 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 
 	// Solve
 	if (linear_solver == LinearSystemSolver::DirectLU) {
-		this->logger->start_timing("directLU");
+		this->logger->start_timing("toEigenMatrix");
 		std::vector<Eigen::Triplet<double>> triplets;
 		assembled.hess->to_triplets(triplets);
 
@@ -357,7 +361,8 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
 		s.resize(rhs.size(), rhs.size());
 		s.setFromTriplets(triplets.begin(), triplets.end());
 		s.makeCompressed();
-
+		this->logger->stop_timing_add("toEigenMatrix");
+		this->logger->start_timing("directLU");
 #ifdef EIGEN_USE_MKL_ALL
 		Eigen::PardisoLU<Eigen::SparseMatrix<double>> lu;
 #else
@@ -390,7 +395,7 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
         return true;
 	}
     if (linear_solver == LinearSystemSolver::DirectLDLT) {
-        this->logger->start_timing("directLDLT");
+    	this->logger->start_timing("toEigenMatrix");
         std::vector<Eigen::Triplet<double>> triplets;
         assembled.hess->to_triplets(triplets);
 
@@ -398,7 +403,8 @@ bool stark::core::NewtonsMethod::_solve_linear_system(Eigen::VectorXd& du, const
         s.resize(rhs.size(), rhs.size());
         s.setFromTriplets(triplets.begin(), triplets.end());
         s.makeCompressed();
-
+    	this->logger->stop_timing_add("toEigenMatrix");
+    	this->logger->start_timing("directLDLT");
 #ifdef EIGEN_USE_MKL_ALL
         Eigen::PardisoLDLT<Eigen::SparseMatrix<double>> ldlt;
         ldlt.pardisoParameterArray()[20] = 1;   // Apply 1x1 and 2x2 Bunch-Kaufman pivoting to support indefinite matrices
