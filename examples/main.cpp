@@ -39,6 +39,7 @@ void circle_growth_mp()
 
     //scene_settings.write_quadrature_mesh = true;
     scene_settings.write_subdivided_mesh = true;
+    scene_settings.subfolder_per_simulation = true;
     scene_settings.mp_use_quaternion_gamma = true;
     scene_settings.mp_use_nonlinear_volume = false;
     scene_settings.mp_use_full_model = false;
@@ -246,6 +247,7 @@ void circle_growth_mp()
 void curvature_modes_mp()
 {
     ShellSceneSettings scene_settings("curvature_modes_mp");
+    scene_settings.subfolder_per_simulation = true;
     scene_settings.write_quadrature_mesh = false;
     scene_settings.write_subdivided_mesh = true;
     scene_settings.mesh_subdivision_level = 4;
@@ -266,8 +268,7 @@ void curvature_modes_mp()
     };
 
     const auto scene = [](const ShellSceneSettings& scene_settings, int n, int axis, double curvature_factor) { ;
-        stark::Settings settings = scene_settings.simulator_settings();
-        settings.output.simulation_name = fmt::format("{}_n_{}_axis_{}", scene_settings.get_simulation_name(), n, axis);
+        stark::Settings settings = scene_settings.simulator_settings(fmt::format("curv_mp_n_{}_axis_{}", n, axis));
 
         settings.models.enable_model_mp_shell = true;
         settings.execution.end_simulation_time = 5.0;
