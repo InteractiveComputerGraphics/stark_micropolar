@@ -104,7 +104,7 @@ void circle_growth_mp()
             dx = std::min(dx, (v2-v1).norm());
         }
 
-        fmt::print("Shortest edge (dx): {:.e}\n", dx);
+        fmt::print("Shortest edge (dx): {:e}\n", dx);
 
         auto material = SurfaceMaterialBuilder();
         material.strain_model = SurfaceMaterialBuilder::StrainModel::Micropolar;
@@ -462,7 +462,7 @@ void armadillo_twisting_mp()
             dx = std::min(dx, (v2-v1).norm());
         }
 
-        fmt::print("Shortest edge (dx): {:.e}\n", dx);
+        fmt::print("Shortest edge (dx): {:e}\n", dx);
 
         auto material = SurfaceMaterialBuilder();
         material.strain_model = SurfaceMaterialBuilder::StrainModel::Micropolar;
@@ -1200,7 +1200,7 @@ void bunny_comparison_mp()
             dx = std::min(dx, (v2-v1).norm());
         }
 
-        fmt::print("Shortest edge (dx): {:.e}\n", dx);
+        fmt::print("Shortest edge (dx): {:e}\n", dx);
 
         auto material = SurfaceMaterialBuilder();
         material.strain_model = scene_settings.shell_model;
@@ -1355,7 +1355,7 @@ void curved_shell_mp_halfsphere_twisting()
             dx = std::min(dx, (v2-v1).norm());
         }
 
-        fmt::print("Shortest edge (dx): {:.e}\n", dx);
+        fmt::print("Shortest edge (dx): {:e}\n", dx);
 
         auto material = SurfaceMaterialBuilder();
         material.strain_model = SurfaceMaterialBuilder::StrainModel::Micropolar;
