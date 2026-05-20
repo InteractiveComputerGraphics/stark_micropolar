@@ -47,7 +47,7 @@ void circle_growth_mp()
     //scene_settings.mp_never_project_to_pd = false;
     //scene_settings.project_to_pd = true;
 
-    const auto scene = [&](const ShellSceneSettings& scene_settings, GrowthOrigin growth_origin, const stark::Mesh<3>& mesh, int subdivision){
+    const auto scene = [](const ShellSceneSettings& scene_settings, GrowthOrigin growth_origin, const stark::Mesh<3>& mesh, int subdivision){
         stark::Settings settings = scene_settings.simulator_settings(fmt::format("{}_{}tris_n{}", growth_origin == GrowthOrigin::Inner ? "inner" : "outer", mesh.conn.size(), subdivision));
 
         settings.models.enable_model_mp_shell = true;
@@ -267,7 +267,7 @@ void curvature_modes_mp()
             5,
     };
 
-    const auto scene = [](const ShellSceneSettings& scene_settings, int n, int axis, double curvature_factor) { ;
+    const auto scene = [](const ShellSceneSettings& scene_settings, int n, int axis, double curvature_factor) {
         stark::Settings settings = scene_settings.simulator_settings(fmt::format("curv_mp_n_{}_axis_{}", n, axis));
 
         settings.models.enable_model_mp_shell = true;
@@ -389,7 +389,7 @@ void armadillo_twisting_mp()
 
     const bool with_contact = false;
 
-    const auto scene = [&](const ShellSceneSettings& scene_settings, const std::string& mesh, int subdivision, int curvature_index){
+    const auto scene = [](const ShellSceneSettings& scene_settings, const std::string& mesh, int subdivision, int curvature_index){
         stark::Settings settings = scene_settings.simulator_settings(fmt::format("c{}_{}_n{}", curvature_index, mesh, subdivision));
 
         settings.execution.end_simulation_time = 4.0;
@@ -1125,7 +1125,7 @@ void bunny_comparison_mp()
     scene_settings.subfolder_per_simulation = true;
     scene_settings.residual_tol = 1e-7;
 
-    const auto scene = [&](const ShellSceneSettings& scene_settings, const std::string& mesh, double thickness, int subdivision){
+    const auto scene = [](const ShellSceneSettings& scene_settings, const std::string& mesh, double thickness, int subdivision){
         std::string thickness_value = fmt::format("{:.1e}", thickness);
         std::replace( thickness_value.begin(), thickness_value.end(), '.', '_');
 
@@ -1296,7 +1296,7 @@ void curved_shell_mp_halfsphere_twisting()
     //scene_settings.quadrature = stark::TriQuadrature::tri_p4();
     //scene_settings.set_tri3_p2p2();
 
-    const auto scene = [&](const ShellSceneSettings& scene_settings, double thickness, int subdivision){
+    const auto scene = [](const ShellSceneSettings& scene_settings, double thickness, int subdivision){
         std::string thickness_value = fmt::format("{:.1e}", thickness);
         std::replace( thickness_value.begin(), thickness_value.end(), '.', '_');
 
@@ -2058,7 +2058,7 @@ void plate_angular_inertia_mp() {
     ShellSceneSettings scene_settings("plate_angular_inertia_mp");
     scene_settings.output_fps = 60;
 
-    const auto scene = [&](const ShellSceneSettings& scene_settings, const bool enable_angular_inertia) {
+    const auto scene = [](const ShellSceneSettings& scene_settings, const bool enable_angular_inertia) {
         stark::Settings settings = scene_settings.simulator_settings();
 
         settings.models.enable_model_mp_shell = true;
@@ -2284,7 +2284,7 @@ int main() {
     //paper_scenes::circle_growth_mp();
     //paper_scenes::curvature_modes_mp();
     //paper_scenes::armadillo_twisting_mp();
-    paper_scenes::plate_twisting_mp_refinement_study();
+    //paper_scenes::plate_twisting_mp_refinement_study();
     //paper_scenes::plate_loading_mp_refinement_study();
     //paper_scenes::plate_roll_mp_refinement_study();
     //paper_scenes::lotus_mp_refinement_study();
