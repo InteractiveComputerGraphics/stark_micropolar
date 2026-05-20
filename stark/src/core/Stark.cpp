@@ -182,7 +182,7 @@ bool Stark::run_one_step()
 
 			this->dt /= 2.0;
 			if (this->dt < this->settings.simulation.time_step_size_lower_bound) {
-				this->console.print(fmt::format("Adaptive time step size out of bounds ({:.e}). Exiting simulation.\n", this->settings.simulation.time_step_size_lower_bound), ConsoleVerbosity::Frames);
+				this->console.print(fmt::format("Adaptive time step size out of bounds ({:e}). Exiting simulation.\n", this->settings.simulation.time_step_size_lower_bound), ConsoleVerbosity::Frames);
 				return false;
 			}
 		}
