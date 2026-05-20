@@ -29,6 +29,11 @@ if (POLICY CMP0146)
   cmake_policy(SET CMP0146 OLD)
 endif ()
 
+# Normalize DESTINATION paths
+if (POLICY CMP0177)
+  cmake_policy(SET CMP0177 NEW)
+endif ()
+
 #==============================================================================
 # CMake Project.
 #==============================================================================
@@ -58,13 +63,8 @@ option(EIGEN_LEAVE_TEST_IN_ALL_TARGET "Leaves tests in the all target, needed by
 option(EIGEN_BUILD_BLAS "Toggles the building of the Eigen Blas library" ${PROJECT_IS_TOP_LEVEL})
 option(EIGEN_BUILD_LAPACK "Toggles the building of the included Eigen LAPACK library" ${PROJECT_IS_TOP_LEVEL})
 if (EIGEN_BUILD_BLAS OR EIGEN_BUILD_LAPACK)
-  # BLAS and LAPACK currently need a fortran compiler.
-  include(CMakeDetermineFortranCompiler)
-  if (NOT CMAKE_Fortran_COMPILER)
-    set(EIGEN_BUILD_BLAS OFF)
-    set(EIGEN_BUILD_LAPACK OFF)
-  else()
-    # Determine if we should build shared libraries for BLAS/LAPACK on this platform.
+  # Determine if we should build shared libraries for BLAS/LAPACK on this platform.
+  if (NOT EIGEN_BUILD_SHARED_LIBS)
     get_cmake_property(EIGEN_BUILD_SHARED_LIBS TARGET_SUPPORTS_SHARED_LIBS)
   endif()
 endif()
@@ -95,33 +95,63 @@ endif()
 # Version Info.
 #==============================================================================
 
-# Automatically parse the version number from header files.
-file(READ "${PROJECT_SOURCE_DIR}/Eigen/src/Core/util/Macros.h" _eigen_version_header)
-string(REGEX MATCH "define[ \t]+EIGEN_WORLD_VERSION[ \t]+([0-9]+)" _eigen_world_version_match "${_eigen_version_header}")
-set(EIGEN_WORLD_VERSION "${CMAKE_MATCH_1}")
-string(REGEX MATCH "define[ \t]+EIGEN_MAJOR_VERSION[ \t]+([0-9]+)" _eigen_major_version_match "${_eigen_version_header}")
-set(EIGEN_MAJOR_VERSION "${CMAKE_MATCH_1}")
-string(REGEX MATCH "define[ \t]+EIGEN_MINOR_VERSION[ \t]+([0-9]+)" _eigen_minor_version_match "${_eigen_version_header}")
-set(EIGEN_MINOR_VERSION "${CMAKE_MATCH_1}")
-set(EIGEN_VERSION_NUMBER ${EIGEN_WORLD_VERSION}.${EIGEN_MAJOR_VERSION}.${EIGEN_MINOR_VERSION})
+# If version information is not provided, automatically parse the version number
+# from header files.
+file(READ "${PROJECT_SOURCE_DIR}/Eigen/Version" _eigen_version_header)
+if (NOT DEFINED EIGEN_WORLD_VERSION)
+  string(REGEX MATCH "define[ \t]+EIGEN_WORLD_VERSION[ \t]+([0-9]+)" _eigen_world_version_match "${_eigen_version_header}")
+  set(EIGEN_WORLD_VERSION "${CMAKE_MATCH_1}")
+endif()
+if (NOT DEFINED EIGEN_MAJOR_VERSION)
+  string(REGEX MATCH "define[ \t]+EIGEN_MAJOR_VERSION[ \t]+([0-9]+)" _eigen_major_version_match "${_eigen_version_header}")
+  set(EIGEN_MAJOR_VERSION "${CMAKE_MATCH_1}")
+endif()
+if (NOT DEFINED EIGEN_MINOR_VERSION)
+  string(REGEX MATCH "define[ \t]+EIGEN_MINOR_VERSION[ \t]+([0-9]+)" _eigen_minor_version_match "${_eigen_version_header}")
+  set(EIGEN_MINOR_VERSION "${CMAKE_MATCH_1}")
+endif()
+if (NOT DEFINED EIGEN_PATCH_VERSION)
+  string(REGEX MATCH "define[ \t]+EIGEN_PATCH_VERSION[ \t]+([0-9]+)" _eigen_patch_version_match "${_eigen_version_header}")
+  set(EIGEN_PATCH_VERSION "${CMAKE_MATCH_1}")
+endif()
+if (NOT DEFINED EIGEN_PRERELEASE_VERSION)
+  set(EIGEN_PRERELEASE_VERSION "dev")
+endif()
 
 # If we are in a git repo, extract a changeset.
 if(IS_DIRECTORY ${CMAKE_SOURCE_DIR}/.git)
   # if the git program is absent or this will leave the EIGEN_GIT_REVNUM string empty,
   # but won't stop CMake.
-  execute_process(COMMAND git ls-remote --refs -q ${CMAKE_SOURCE_DIR} HEAD OUTPUT_VARIABLE EIGEN_GIT_OUTPUT)
+  execute_process(COMMAND git ls-remote -q ${CMAKE_SOURCE_DIR} HEAD OUTPUT_VARIABLE EIGEN_GIT_OUTPUT)
 endif()
+
 # extract the git rev number from the git output...
 if(EIGEN_GIT_OUTPUT)
-string(REGEX MATCH "^([0-9;a-f]+).*" EIGEN_GIT_CHANGESET_MATCH "${EIGEN_GIT_OUTPUT}")
-set(EIGEN_GIT_REVNUM "${CMAKE_MATCH_1}")
+  string(REGEX MATCH "^([0-9;a-f]+).*" EIGEN_GIT_CHANGESET_MATCH "${EIGEN_GIT_OUTPUT}")
+  set(EIGEN_GIT_REVNUM "${CMAKE_MATCH_1}")
 endif()
-#...and show it next to the version number
-if(EIGEN_GIT_REVNUM)
-  set(EIGEN_VERSION "${EIGEN_VERSION_NUMBER} (git rev ${EIGEN_GIT_REVNUM})")
+
+if (NOT DEFINED EIGEN_BUILD_VERSION AND DEFINED EIGEN_GIT_REVNUM)
+  string(SUBSTRING "${EIGEN_GIT_REVNUM}" 0 8 EIGEN_BUILD_VERSION)
 else()
-  set(EIGEN_VERSION "${EIGEN_VERSION_NUMBER}")
+  set(EIGEN_BUILD_VERSION "")
 endif()
+
+# The EIGEN_VERSION_NUMBER must be of the form <major.minor.patch>.
+# The EIGEN_VERSION_STRING can contain the preprelease/build strings.
+set(EIGEN_VERSION_NUMBER "${EIGEN_MAJOR_VERSION}.${EIGEN_MINOR_VERSION}.${EIGEN_PATCH_VERSION}")
+set(EIGEN_VERSION_STRING "${EIGEN_VERSION_NUMBER}")
+if (NOT "x${EIGEN_PRERELEASE_VERSION}" STREQUAL "x")
+  set(EIGEN_VERSION_STRING "${EIGEN_VERSION_STRING}-${EIGEN_PRERELEASE_VERSION}")
+endif()
+if (NOT "x${EIGEN_BUILD_VERSION}" STREQUAL "x")
+  set(EIGEN_VERSION_STRING "${EIGEN_VERSION_STRING}+${EIGEN_BUILD_VERSION}")
+endif()
+
+
+# Generate version file.
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Version.in"
+               "${CMAKE_CURRENT_BINARY_DIR}/include/Eigen/Version")
 
 #==============================================================================
 # Install Path Configuration.
@@ -170,11 +200,6 @@ endforeach()
 # Eigen Library.
 #==============================================================================
 
-set ( EIGEN_VERSION_STRING ${EIGEN_VERSION_NUMBER} )
-set ( EIGEN_VERSION_MAJOR  ${EIGEN_WORLD_VERSION} )
-set ( EIGEN_VERSION_MINOR  ${EIGEN_MAJOR_VERSION} )
-set ( EIGEN_VERSION_PATCH  ${EIGEN_MINOR_VERSION} )
-
 # Alias Eigen_*_DIR to Eigen3_*_DIR:
 set(Eigen_SOURCE_DIR ${Eigen3_SOURCE_DIR})
 set(Eigen_BINARY_DIR ${Eigen3_BINARY_DIR})
@@ -186,6 +211,9 @@ target_include_directories (eigen INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
   $<INSTALL_INTERFACE:${INCLUDE_INSTALL_DIR}>
 )
+
+# Eigen requires at least C++14
+target_compile_features (eigen INTERFACE cxx_std_14)
 
 # Export as title case Eigen
 set_target_properties (eigen PROPERTIES EXPORT_NAME Eigen)
@@ -206,6 +234,9 @@ if(EIGEN_BUILD_PKGCONFIG)
 endif()
 
 install(DIRECTORY Eigen DESTINATION ${INCLUDE_INSTALL_DIR} COMPONENT Devel)
+# Replace the "Version" header file with the generated one.
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/Eigen/Version
+    DESTINATION ${INCLUDE_INSTALL_DIR}/Eigen/ COMPONENT Devel)
 
 install(TARGETS eigen EXPORT Eigen3Targets)
 
@@ -219,25 +250,10 @@ if(EIGEN_BUILD_CMAKE_PACKAGE)
     NO_CHECK_REQUIRED_COMPONENTS_MACRO # Eigen does not provide components
   )
 
-  # NOTE Remove the first code path once the minimum required CMake version is
-  # bumped to 3.14 or above.
-  if (CMAKE_VERSION VERSION_LESS 3.14)
-    # Remove CMAKE_SIZEOF_VOID_P from Eigen3ConfigVersion.cmake since Eigen does
-    # not depend on architecture specific settings or libraries. More
-    # specifically, an Eigen3Config.cmake generated from a 64 bit target can be
-    # used for 32 bit targets as well (and vice versa).
-    set (_Eigen3_CMAKE_SIZEOF_VOID_P ${CMAKE_SIZEOF_VOID_P})
-    unset (CMAKE_SIZEOF_VOID_P)
-    write_basic_package_version_file (Eigen3ConfigVersion.cmake
-                                      VERSION ${EIGEN_VERSION_NUMBER}
-                                      COMPATIBILITY SameMajorVersion)
-    set (CMAKE_SIZEOF_VOID_P ${_Eigen3_CMAKE_SIZEOF_VOID_P})
-  else (CMAKE_VERSION VERSION_LESS 3.14)
-    write_basic_package_version_file (Eigen3ConfigVersion.cmake
-                                      VERSION ${EIGEN_VERSION_NUMBER}
-                                      COMPATIBILITY SameMajorVersion
-                                      ARCH_INDEPENDENT)
-  endif (CMAKE_VERSION VERSION_LESS 3.14)
+  set(CVF_VERSION "${EIGEN_VERSION_NUMBER}")
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Eigen3ConfigVersion.cmake.in"
+                 "Eigen3ConfigVersion.cmake"
+                 @ONLY)
 
   # The Eigen target will be located in the Eigen3 namespace. Other CMake
   # targets can refer to it using Eigen3::Eigen.
@@ -253,7 +269,7 @@ if(EIGEN_BUILD_CMAKE_PACKAGE)
           DESTINATION ${CMAKEPACKAGE_INSTALL_DIR})
 
   # Add uninstall target
-  if(NOT TARGET uninstall)
+  if(NOT TARGET uninstall AND PROJECT_IS_TOP_LEVEL)
     add_custom_target ( uninstall
         COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EigenUninstall.cmake)
   endif()
@@ -383,11 +399,16 @@ if (EIGEN_BUILD_TESTING)
     ei_add_cxx_compiler_flag("-Wno-psabi")
     ei_add_cxx_compiler_flag("-Wno-variadic-macros")
     ei_add_cxx_compiler_flag("-Wno-long-long")
-    ei_add_cxx_compiler_flag("-fno-check-new")
     ei_add_cxx_compiler_flag("-fno-common")
     ei_add_cxx_compiler_flag("-fstrict-aliasing")
     ei_add_cxx_compiler_flag("-wd981")                    # disable ICC's "operands are evaluated in unspecified order" remark
     ei_add_cxx_compiler_flag("-wd2304")                   # disable ICC's "warning #2304: non-explicit constructor with single argument may cause implicit type conversion" produced by -Wnon-virtual-dtor
+
+    # Clang emits warnings about unused flag.
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      ei_add_cxx_compiler_flag("-fno-check-new")
+    endif()
+
 
     if(ANDROID_NDK)
       ei_add_cxx_compiler_flag("-pie")
@@ -485,6 +506,12 @@ if (EIGEN_BUILD_TESTING)
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mmsa")
       message(STATUS "Enabling MSA in tests/examples")
     endif()
+
+   option(EIGEN_TEST_LSX "Enable/Disable LSX in tests/examples" OFF)
+   if(EIGEN_TEST_LSX)
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mlsx")
+     message(STATUS "Enabling LSX in tests/examples")
+   endif()
 
     option(EIGEN_TEST_NEON "Enable/Disable Neon in tests/examples" OFF)
     if(EIGEN_TEST_NEON)
@@ -738,36 +765,37 @@ if(PROJECT_IS_TOP_LEVEL)
   else()
     message(STATUS "Available targets (use: cmake --build . --target TARGET):")
   endif()
-  message(STATUS "---------+--------------------------------------------------------------")
-  message(STATUS "Target   |   Description")
-  message(STATUS "---------+--------------------------------------------------------------")
-  message(STATUS "install  | Install Eigen. Headers will be installed to:")
-  message(STATUS "         |     <CMAKE_INSTALL_PREFIX>/<INCLUDE_INSTALL_DIR>")
-  message(STATUS "         |   Using the following values:")
-  message(STATUS "         |     CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-  message(STATUS "         |     INCLUDE_INSTALL_DIR:  ${INCLUDE_INSTALL_DIR}")
-  message(STATUS "         |   Change the install location of Eigen headers using:")
-  message(STATUS "         |     cmake . -DCMAKE_INSTALL_PREFIX=yourprefix")
-  message(STATUS "         |   Or:")
-  message(STATUS "         |     cmake . -DINCLUDE_INSTALL_DIR=yourdir")
-  message(STATUS "uninstall| Remove files installed by the install target")
+  message(STATUS "------------+--------------------------------------------------------------")
+  message(STATUS "Target      |   Description")
+  message(STATUS "------------+--------------------------------------------------------------")
+  message(STATUS "install     | Install Eigen. Headers will be installed to:")
+  message(STATUS "            |     <CMAKE_INSTALL_PREFIX>/<INCLUDE_INSTALL_DIR>")
+  message(STATUS "            |   Using the following values:")
+  message(STATUS "            |     CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
+  message(STATUS "            |     INCLUDE_INSTALL_DIR:  ${INCLUDE_INSTALL_DIR}")
+  message(STATUS "            |   Change the install location of Eigen headers using:")
+  message(STATUS "            |     cmake . -DCMAKE_INSTALL_PREFIX=yourprefix")
+  message(STATUS "            |   Or:")
+  message(STATUS "            |     cmake . -DINCLUDE_INSTALL_DIR=yourdir")
+  message(STATUS "uninstall   | Remove files installed by the install target")
   if (EIGEN_BUILD_DOC)
-    message(STATUS "doc      | Generate the API documentation, requires Doxygen & LaTeX")
+    message(STATUS "doc         | Generate the API documentation, requires Doxygen & LaTeX")
+    message(STATUS "install-doc | Install the API documentation")
   endif()
   if(EIGEN_BUILD_TESTING)
-    message(STATUS "check    | Build and run the unit-tests. Read this page:")
-    message(STATUS "         |   http://eigen.tuxfamily.org/index.php?title=Tests")
+    message(STATUS "check       | Build and run the unit-tests. Read this page:")
+    message(STATUS "            |   http://eigen.tuxfamily.org/index.php?title=Tests")
   endif()
   if (EIGEN_BUILD_BLAS)
-    message(STATUS "blas     | Build BLAS library (not the same thing as Eigen)")
+    message(STATUS "blas        | Build BLAS library (not the same thing as Eigen)")
   endif()
   if (EIGEN_BUILD_LAPACK)
-    message(STATUS "lapack   | Build LAPACK subset library (not the same thing as Eigen)")
+    message(STATUS "lapack      | Build LAPACK subset library (not the same thing as Eigen)")
   endif()
-  message(STATUS "---------+--------------------------------------------------------------")
+  message(STATUS "------------+--------------------------------------------------------------")
   message(STATUS "")
 endif()
 
 message(STATUS "")
-message(STATUS "Configured Eigen ${EIGEN_VERSION_NUMBER}")
+message(STATUS "Configured Eigen ${EIGEN_VERSION_STRING}")
 message(STATUS "")
